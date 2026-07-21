@@ -38,7 +38,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verbose", action="store_true")
     args = parser.parse_args()
-    _run(["pyoxidizer", "build", "--path", str(ROOT), *( ["--verbose"] if args.verbose else [] )])
+    _run(["pyoxidizer", "build", "--path", str(ROOT), *(["--verbose"] if args.verbose else [])])
 
     OUTPUT.mkdir(parents=True, exist_ok=True)
     binary = _find_binary()
