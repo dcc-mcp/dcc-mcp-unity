@@ -1,5 +1,4 @@
 using System;
-using System.Globalization;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEditor;
@@ -28,22 +27,19 @@ namespace DccMcp.Unity.Tests
             var created = DccMcpCommands.Execute(
                 "scene.create_game_object",
                 new JObject { ["name"] = "CI Probe" });
-            var instanceId = created["instance_id"].ToString();
+            var instanceIdToken = created["instance_id"];
+            var instanceId = instanceIdToken.ToString();
 #if UNITY_6000_5_OR_NEWER
-            Assert.That(created["instance_id"].Type, Is.EqualTo(JTokenType.String));
+            Assert.That(instanceIdToken.Type, Is.EqualTo(JTokenType.String));
 #else
-            Assert.That(created["instance_id"].Type, Is.EqualTo(JTokenType.Integer));
-#endif
-            JToken requestId = instanceId;
-#if !UNITY_6000_5_OR_NEWER
-            requestId = int.Parse(instanceId, CultureInfo.InvariantCulture);
+            Assert.That(instanceIdToken.Type, Is.EqualTo(JTokenType.Integer));
 #endif
 
             DccMcpCommands.Execute(
                 "scene.set_transform",
                 new JObject
                 {
-                    ["instance_id"] = requestId,
+                    ["instance_id"] = instanceIdToken.DeepClone(),
                     ["position"] = new JArray(1, 2, 3),
                 });
 
@@ -58,6 +54,17 @@ namespace DccMcp.Unity.Tests
             Assert.That(roots, Has.Count.EqualTo(1));
             Assert.That((string)roots[0]["name"], Is.EqualTo("CI Probe"));
             Assert.That((bool)snapshot["truncated"], Is.False);
+
+            Assert.That(
+                () => DccMcpCommands.Execute(
+                    "scene.set_transform",
+                    new JObject
+                    {
+                        ["instance_id"] = "1e3",
+                        ["position"] = new JArray(0, 0, 0),
+                    }),
+                Throws.TypeOf<InvalidOperationException>()
+                    .With.Message.EqualTo("instance_id is not a valid Unity object ID."));
         }
 
         [Test]
