@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Existing GitHub release tag to rebuild standalone assets for"
+        required: true
+        default: "v0.4.0"
 
 permissions:
   contents: write
@@ -46,7 +51,7 @@ jobs:
 
   standalone:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    if: ${{ needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
     strategy:
       fail-fast: false
       matrix:
@@ -60,7 +65,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && 'main' || needs.release-please.outputs.tag_name }}
       - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
@@ -73,23 +78,23 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          archive="dcc-mcp-unity-${{ needs.release-please.outputs.tag_name }}-${RUNNER_OS,,}-${RUNNER_ARCH}.tar.gz"
+          archive="dcc-mcp-unity-${{ needs.release-please.outputs.tag_name || inputs.tag_name }}-${RUNNER_OS,,}-${RUNNER_ARCH}.tar.gz"
           tar -czf "$archive" -C dist/standalone .
           echo "ASSET=$archive" >> "$GITHUB_ENV"
       - name: Archive standalone (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $archive = "dcc-mcp-unity-${{ needs.release-please.outputs.tag_name }}-windows-${env:RUNNER_ARCH}.zip"
+          $archive = "dcc-mcp-unity-${{ needs.release-please.outputs.tag_name || inputs.tag_name }}-windows-${env:RUNNER_ARCH}.zip"
           Compress-Archive -Path dist/standalone/* -DestinationPath $archive
           "ASSET=$archive" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Upload standalone release asset (Unix)
         if: runner.os != 'Windows'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ needs.release-please.outputs.tag_name }}" "$ASSET" --clobber
+        run: gh release upload "${{ needs.release-please.outputs.tag_name || inputs.tag_name }}" "$ASSET" --clobber
       - name: Upload standalone release asset (Windows)
         if: runner.os == 'Windows'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ needs.release-please.outputs.tag_name }}" "$env:ASSET" --clobber
+        run: gh release upload "${{ needs.release-please.outputs.tag_name || inputs.tag_name }}" "$env:ASSET" --clobber
