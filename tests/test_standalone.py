@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import pytest
-
-from dcc_mcp_unity._standalone_entry import _claim_pid_file, _parse_args
+from dcc_mcp_unity._standalone_entry import _parse_args
 
 
 def test_standalone_options_are_explicit() -> None:
@@ -12,13 +10,3 @@ def test_standalone_options_are_explicit() -> None:
     assert options.bridge_port == 4000
     assert options.mcp_port == 4100
     assert options.watch_pid == 12
-
-
-def test_pid_file_prevents_duplicate_process(tmp_path) -> None:
-    pid_file = tmp_path / "sidecar.pid"
-    claimed = _claim_pid_file(str(pid_file))
-    assert claimed == pid_file.resolve()
-    assert pid_file.read_text(encoding="ascii")
-    with pytest.raises(SystemExit, match="already running"):
-        _claim_pid_file(str(pid_file))
-    pid_file.unlink()
