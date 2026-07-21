@@ -75,6 +75,19 @@ def test_bundled_skills_release_and_upm_package_exist():
         encoding="utf-8"
     )
 
+    latest_project = ROOT / "tests" / "unity-6000-project"
+    latest_manifest = json.loads(
+        (latest_project / "Packages" / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert latest_manifest["dependencies"]["com.dcc-mcp.unity"] == (
+        "file:../../../src/dcc_mcp_unity/unity_package"
+    )
+    assert latest_manifest["dependencies"]["com.unity.test-framework"] == "1.4.6"
+    assert latest_manifest["testables"] == ["com.dcc-mcp.unity"]
+    assert "6000.5.4f1" in (latest_project / "ProjectSettings" / "ProjectVersion.txt").read_text(
+        encoding="utf-8"
+    )
+
     for skill in skills.iterdir():
         if skill.is_dir():
             dependencies = skill / "metadata" / "depends.md"
@@ -90,6 +103,7 @@ def test_unity_bridge_preserves_main_thread_and_undo_contracts():
     bridge = (PACKAGE / "Editor" / "DccMcpBridge.cs").read_text(encoding="utf-8")
     commands = (PACKAGE / "Editor" / "DccMcpCommands.cs").read_text(encoding="utf-8")
     console = (PACKAGE / "Editor" / "DccMcpConsole.cs").read_text(encoding="utf-8")
+    identity = (PACKAGE / "Editor" / "DccMcpObjectIdentity.cs").read_text(encoding="utf-8")
     assert "EditorApplication.update += OnEditorUpdate" in bridge
     assert "MaxPendingRequests" in bridge
     assert "RequestQueueLifetime" in bridge
@@ -120,6 +134,24 @@ def test_unity_bridge_preserves_main_thread_and_undo_contracts():
     assert "limit must be an integer" in console
     assert "scene.create_game_object" in commands
     assert "CompileAssemblyFromSource" not in bridge + commands
+    assert "UNITY_6000_5_OR_NEWER" in identity
+    assert "GetEntityId" in identity
+    assert "EntityIdToObject" in identity
+
+
+def test_unity_ci_serializes_license_and_pins_secret_consumers():
+    workflow = (ROOT / ".github" / "workflows" / "unity.yml").read_text(encoding="utf-8")
+    static_ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "group: unity-personal-license" in workflow
+    assert "cancel-in-progress: false" in workflow
+    assert "max-parallel: 1" in workflow
+    assert "game-ci/unity-test-runner@0ff419b913a3630032cbe0de48a0099b5a9f0ed9" in workflow
+    assert workflow.count("@sha256:") == 3
+    assert "UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}" in workflow
+    assert "useHostNetwork: true" in workflow
+    assert "tools/unity_bridge_smoke.py" in workflow
+    assert "unity-editmode:" not in static_ci
 
 
 def test_runtime_version_matches_distribution_metadata():

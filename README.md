@@ -63,7 +63,10 @@ contracts; performs static checks for the UPM package and main-thread/Undo contr
 PyPI artifacts. Trusted pull requests, `main`, and the weekly schedule also compile the UPM package
 and run its command, scene, Undo, and validation tests through GameCI in Unity 2018.4.36f1,
 2021.3.45f1, and 6000.5.4f1. Fork pull requests skip the licensed Editor jobs because GitHub does
-not expose repository secrets to forks.
+not expose repository secrets to forks. Licensed runs share one repository-wide queue across pull
+requests, `main`, releases, and schedules so a Personal seat is never activated concurrently. Each
+Editor also completes a real WebSocket `hello` → `project.inspect` → response smoke against the
+Python sidecar and records the reported Editor version as an artifact.
 
 ## Development
 

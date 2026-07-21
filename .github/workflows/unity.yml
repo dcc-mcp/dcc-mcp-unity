@@ -1,0 +1,145 @@
+name: Unity Editor Tests
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, "release-please--branches--**"]
+  schedule:
+    - cron: "29 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# The Personal license is shared by every ref in this repository. Keeping the
+# complete matrix in one globally serialized workflow prevents overlapping
+# Editor activations from PR, main, release, and scheduled runs.
+concurrency:
+  group: unity-personal-license
+  cancel-in-progress: false
+
+jobs:
+  unity-editmode:
+    name: Unity ${{ matrix.label }} / EditMode
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include:
+          - label: "2018.4"
+            unity-version: 2018.4.36f1
+            image: unityci/editor:ubuntu-2018.4.36f1-base-3.2.2@sha256:83e40412a732421a2630659f5fe549cab1cc4935f3018599bb8e4b89238c7fc5
+            artifact-key: "2018.4"
+            package_mode: false
+            project_path: tests/unity-2018-project
+          - label: "2021.3"
+            unity-version: 2021.3.45f1
+            image: unityci/editor:ubuntu-2021.3.45f1-linux-il2cpp-3.2.2@sha256:e0a05df7515ef7f02dc54485753762380d740b8a383e12c090201ef0e7d3a80b
+            artifact-key: "2021.3"
+            package_mode: true
+            project_path: src/dcc_mcp_unity/unity_package
+          - label: "6000.5"
+            unity-version: 6000.5.4f1
+            image: unityci/editor:ubuntu-6000.5.4f1-linux-il2cpp-3.2.2@sha256:bad343705632754cd5015e16421d6ddbe6a066387f9780d368825116c0ec56e3
+            artifact-key: "6000.5"
+            package_mode: false
+            project_path: tests/unity-6000-project
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install bridge smoke dependencies
+        run: python -m pip install -e .
+      - name: Start real Unity bridge smoke
+        shell: bash
+        env:
+          EXPECTED_UNITY_VERSION: ${{ matrix.unity-version }}
+          SMOKE_PATH: artifacts/unity-${{ matrix.artifact-key }}-bridge-smoke
+        run: |
+          mkdir -p "$SMOKE_PATH"
+          nohup python tools/unity_bridge_smoke.py \
+            --expected-version "$EXPECTED_UNITY_VERSION" \
+            --output "$SMOKE_PATH/bridge-smoke.json" \
+            --ready "$SMOKE_PATH/bridge-ready.json" \
+            > "$SMOKE_PATH/bridge-smoke.log" 2>&1 < /dev/null &
+          echo $! > "$RUNNER_TEMP/unity-bridge-smoke.pid"
+          for _ in $(seq 1 100); do
+            if [[ -f "$SMOKE_PATH/bridge-ready.json" ]]; then
+              exit 0
+            fi
+            if ! kill -0 "$(cat "$RUNNER_TEMP/unity-bridge-smoke.pid")" 2>/dev/null; then
+              cat "$SMOKE_PATH/bridge-smoke.log"
+              exit 1
+            fi
+            sleep 0.1
+          done
+          cat "$SMOKE_PATH/bridge-smoke.log"
+          exit 1
+      - id: unity-tests
+        # v4
+        uses: game-ci/unity-test-runner@0ff419b913a3630032cbe0de48a0099b5a9f0ed9
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          packageMode: ${{ matrix.package_mode }}
+          projectPath: ${{ matrix.project_path }}
+          unityVersion: ${{ matrix.unity-version }}
+          customImage: ${{ matrix.image }}
+          testMode: EditMode
+          useHostNetwork: true
+          artifactsPath: artifacts/unity-${{ matrix.artifact-key }}-editmode
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: Unity ${{ matrix.label }} / EditMode results
+      - name: Verify real Unity bridge smoke
+        if: always()
+        shell: bash
+        env:
+          EXPECTED_UNITY_VERSION: ${{ matrix.unity-version }}
+          SMOKE_PATH: artifacts/unity-${{ matrix.artifact-key }}-bridge-smoke
+        run: |
+          pid="$(cat "$RUNNER_TEMP/unity-bridge-smoke.pid")"
+          for _ in $(seq 1 40); do
+            [[ -f "$SMOKE_PATH/bridge-smoke.json" ]] && break
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.25
+          done
+          if [[ ! -f "$SMOKE_PATH/bridge-smoke.json" ]]; then
+            cat "$SMOKE_PATH/bridge-smoke.log"
+            kill "$pid" 2>/dev/null || true
+            exit 1
+          fi
+          python - "$SMOKE_PATH/bridge-smoke.json" "$EXPECTED_UNITY_VERSION" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          payload = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          if payload != {
+              "engine_version": sys.argv[2],
+              "project_name": payload.get("project_name", ""),
+              "status": "passed",
+          }:
+              raise SystemExit(f"invalid bridge smoke evidence: {payload!r}")
+          print(f"Verified Unity bridge hello/request/response on {sys.argv[2]}")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unity-${{ matrix.artifact-key }}-editmode-results
+          path: |
+            ${{ steps.unity-tests.outputs.artifactsPath }}
+            artifacts/unity-${{ matrix.artifact-key }}-bridge-smoke
+          if-no-files-found: warn
+          retention-days: 14
