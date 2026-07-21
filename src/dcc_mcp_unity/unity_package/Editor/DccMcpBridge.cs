@@ -82,6 +82,7 @@ namespace DccMcp.Unity
             EditorApplication.update += OnEditorUpdate;
             EditorApplication.quitting += Stop;
             AssemblyReloadEvents.beforeAssemblyReload += Stop;
+            DccMcpSidecarLauncher.StartIfConfigured();
             _ = RunAsync(Lifetime.Token);
         }
 

@@ -38,6 +38,17 @@ lower it; queued Editor work expires first so timed-out mutations are not execut
 The default bridge targets one Unity Editor. For concurrent Editors, run one adapter per Editor and
 assign each pair a unique bridge port and URL before starting either process.
 
+## Standalone sidecar
+
+Hosts without an embedded Python runtime can use the PyOxidizer sidecar released with each version.
+The release asset contains the executable, its adjacent `lib/` runtime, and `SHA256SUMS`. Configure
+the Unity package to start it on editor load by setting `DCC_MCP_UNITY_SIDECAR_PATH`; optionally set
+`DCC_MCP_UNITY_SIDECAR_SHA256` to the published digest. The launcher is loopback-only, passes the
+Unity process id to `--watch-pid`, and uses a per-project pid file to avoid duplicate sidecars after
+assembly reloads.
+
+For local development, run `dcc-mcp-unity-standalone --bridge-port 3852 --watch-pid <unity-pid>`.
+
 ## Agent workflow
 
 1. Load `unity-project` and call `inspect_project` before assuming project or editor state. Stop if
