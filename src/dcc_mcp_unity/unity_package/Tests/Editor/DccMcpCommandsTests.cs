@@ -37,7 +37,7 @@ namespace DccMcp.Unity.Tests
                     ["position"] = new JArray(1, 2, 3),
                 });
 
-            var gameObject = EditorUtility.InstanceIDToObject(instanceId) as GameObject;
+            var gameObject = DccMcpObjectIdentity.Resolve(instanceId) as GameObject;
             Assert.That(gameObject, Is.Not.Null);
             Assert.That(gameObject.transform.position, Is.EqualTo(new Vector3(1, 2, 3)));
 
@@ -60,7 +60,7 @@ namespace DccMcp.Unity.Tests
 
             Undo.PerformUndo();
 
-            Assert.That(EditorUtility.InstanceIDToObject(instanceId), Is.Null);
+            Assert.That(DccMcpObjectIdentity.Resolve(instanceId), Is.Null);
         }
 
         [Test]

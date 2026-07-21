@@ -47,6 +47,13 @@ def test_install_rejects_unsupported_unity_version(tmp_path: Path):
         install_package(tmp_path)
 
 
+@pytest.mark.parametrize("version", ["2018.4.36b1", "2018.4.36f0"])
+def test_install_rejects_prerelease_before_minimum_editor(tmp_path: Path, version: str):
+    make_unity_project(tmp_path, version)
+    with pytest.raises(ValueError, match="requires Unity 2018.4.36f1 or newer"):
+        install_package(tmp_path)
+
+
 def test_read_unity_version_preserves_exact_editor_version(tmp_path: Path):
     make_unity_project(tmp_path, "6000.0.31f1")
     assert read_unity_version(tmp_path) == "6000.0.31f1"

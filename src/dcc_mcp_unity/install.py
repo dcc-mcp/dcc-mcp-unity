@@ -9,7 +9,13 @@ from pathlib import Path
 
 PACKAGE_NAME = "com.dcc-mcp.unity"
 MIN_UNITY_VERSION = (2018, 4, 36)
+MIN_UNITY_RELEASE = ("f", 1)
 _EDITOR_VERSION_PATTERN = re.compile(r"^m_EditorVersion:\s*(\S+)\s*$", re.MULTILINE)
+_UNITY_VERSION_PATTERN = re.compile(
+    r"^(\d+)\.(\d+)\.(\d+)([abfp])(\d+)(?:[a-z]\d+)*$",
+    re.IGNORECASE,
+)
+_RELEASE_CHANNEL_ORDER = {"a": 0, "b": 1, "f": 2, "p": 3}
 
 
 def read_unity_version(project: Path) -> str:
@@ -27,11 +33,23 @@ def read_unity_version(project: Path) -> str:
 
 
 def _require_supported_unity_version(version: str) -> None:
-    match = re.match(r"^(\d+)\.(\d+)\.(\d+)", version)
+    match = _UNITY_VERSION_PATTERN.fullmatch(version)
     if match is None:
         raise ValueError(f"unsupported Unity version format: {version}")
-    parsed = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
-    if parsed < MIN_UNITY_VERSION:
+    channel = match.group(4).lower()
+    parsed = (
+        int(match.group(1)),
+        int(match.group(2)),
+        int(match.group(3)),
+        _RELEASE_CHANNEL_ORDER[channel],
+        int(match.group(5)),
+    )
+    minimum = (
+        *MIN_UNITY_VERSION,
+        _RELEASE_CHANNEL_ORDER[MIN_UNITY_RELEASE[0]],
+        MIN_UNITY_RELEASE[1],
+    )
+    if parsed < minimum:
         raise ValueError(
             f"Unity {version} is unsupported; DCC-MCP Unity requires Unity 2018.4.36f1 or newer"
         )

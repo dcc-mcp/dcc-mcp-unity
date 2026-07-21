@@ -196,7 +196,7 @@ namespace DccMcp.Unity
             return new JObject
             {
                 ["name"] = Truncate(gameObject.name, MaxSnapshotTextCharacters),
-                ["instance_id"] = gameObject.GetInstanceID(),
+                ["instance_id"] = DccMcpObjectIdentity.GetId(gameObject),
                 ["active"] = gameObject.activeSelf,
                 ["tag"] = gameObject.tag,
                 ["layer"] = gameObject.layer,
@@ -226,7 +226,7 @@ namespace DccMcp.Unity
             {
                 ["created"] = true,
                 ["name"] = gameObject.name,
-                ["instance_id"] = gameObject.GetInstanceID(),
+                ["instance_id"] = DccMcpObjectIdentity.GetId(gameObject),
                 ["parent_instance_id"] = parentId,
             };
         }
@@ -295,7 +295,7 @@ namespace DccMcp.Unity
 
         private static GameObject ResolveGameObject(int instanceId)
         {
-            var gameObject = EditorUtility.InstanceIDToObject(instanceId) as GameObject;
+            var gameObject = DccMcpObjectIdentity.Resolve(instanceId) as GameObject;
             if (gameObject == null)
             {
                 throw new InvalidOperationException(
