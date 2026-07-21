@@ -230,14 +230,17 @@ namespace DccMcp.Unity.Tests
         [Test]
         public void EnabledBuildScenesMustExistAndHaveNoUnsavedOpenChanges()
         {
-            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(string.Empty, true) };
+            var testDirectory = Path.Combine(Application.dataPath, "DccMcpJobTests");
+            Directory.CreateDirectory(testDirectory);
+            var invalidScenePath = "Assets/DccMcpJobTests/NotAScene.txt";
+            File.WriteAllText(Path.Combine(testDirectory, "NotAScene.txt"), "not a scene");
+            AssetDatabase.ImportAsset(invalidScenePath);
+            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(invalidScenePath, true) };
             Assert.That(
                 () => DccMcpJobs.ValidateEnabledBuildScenes(),
                 Throws.TypeOf<InvalidOperationException>()
                     .With.Message.Contains("saved .unity asset"));
 
-            var testDirectory = Path.Combine(Application.dataPath, "DccMcpJobTests");
-            Directory.CreateDirectory(testDirectory);
             var scenePath = "Assets/DccMcpJobTests/BuildScene.unity";
             var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             Assert.That(EditorSceneManager.SaveScene(scene, scenePath), Is.True);
