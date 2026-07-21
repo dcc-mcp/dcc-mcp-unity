@@ -17,12 +17,30 @@ concurrency:
 
 jobs:
   unity-editmode:
-    name: Unity 2021.3 / EditMode
+    name: Unity ${{ matrix.label }} / EditMode
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      # A Personal license is one seat, so Editor activations must not overlap.
+      max-parallel: 1
+      matrix:
+        include:
+          - label: "2018.4"
+            unity-version: 2018.4.36f1
+            image: unityci/editor:ubuntu-2018.4.36f1-base-3.2.2
+            artifact-key: "2018.4"
+          - label: "2021.3"
+            unity-version: 2021.3.45f1
+            image: unityci/editor:ubuntu-2021.3.45f1-linux-il2cpp-3.2.2
+            artifact-key: "2021.3"
+          - label: "6000.5"
+            unity-version: 6000.5.4f1
+            image: unityci/editor:ubuntu-6000.5.4f1-linux-il2cpp-3.2.2
+            artifact-key: "6000.5"
     permissions:
       contents: read
       checks: write
@@ -37,15 +55,16 @@ jobs:
         with:
           packageMode: true
           projectPath: src/dcc_mcp_unity/unity_package
-          unityVersion: 2021.3.45f1
+          unityVersion: ${{ matrix.unity-version }}
+          customImage: ${{ matrix.image }}
           testMode: EditMode
-          artifactsPath: artifacts/unity-2021.3-editmode
+          artifactsPath: artifacts/unity-${{ matrix.artifact-key }}-editmode
           githubToken: ${{ secrets.GITHUB_TOKEN }}
-          checkName: Unity 2021.3 / EditMode results
+          checkName: Unity ${{ matrix.label }} / EditMode results
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: unity-2021.3-editmode-results
+          name: unity-${{ matrix.artifact-key }}-editmode-results
           path: ${{ steps.unity-tests.outputs.artifactsPath }}
           if-no-files-found: warn
           retention-days: 14

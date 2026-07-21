@@ -38,6 +38,8 @@ def test_bundled_skills_release_and_upm_package_exist():
     assert (ROOT / ".github" / "workflows" / "release.yml").is_file()
     package = json.loads((PACKAGE / "package.json").read_text(encoding="utf-8"))
     assert package["name"] == "com.dcc-mcp.unity"
+    assert package["unity"] == "2018.4"
+    assert package["unityRelease"] == "36f1"
     assert package["dependencies"]["com.unity.nuget.newtonsoft-json"] == "3.2.2"
     assert (PACKAGE / "LICENSE.md").is_file()
 
@@ -45,6 +47,7 @@ def test_bundled_skills_release_and_upm_package_exist():
         (PACKAGE / "Editor" / "DccMcp.Unity.Editor.asmdef").read_text(encoding="utf-8")
     )
     assert assembly["references"] == []
+    assert "rootNamespace" not in assembly
     assert assembly["includePlatforms"] == ["Editor"]
 
     test_assembly = json.loads(
@@ -53,6 +56,7 @@ def test_bundled_skills_release_and_upm_package_exist():
         )
     )
     assert test_assembly["references"] == ["DccMcp.Unity.Editor"]
+    assert "rootNamespace" not in test_assembly
     assert test_assembly["overrideReferences"] is True
     assert test_assembly["precompiledReferences"] == ["Newtonsoft.Json.dll"]
     assert test_assembly["includePlatforms"] == ["Editor"]

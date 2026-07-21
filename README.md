@@ -5,6 +5,10 @@
 Unity Editor adapter for the DCC Model Context Protocol ecosystem. It ships a UPM Editor package,
 a loopback WebSocket bridge, and typed project and scene tools.
 
+The supported Editor range starts at Unity 2018.4.36f1 with the .NET 4.x Equivalent scripting
+runtime. CI pins the final Unity 2018 LTS patch, the 2021.3 baseline, and the current stable Unity 6
+release instead of using a drifting `latest` tag.
+
 The first-release boundary and comparison with `unity-cli` and two established Unity MCP projects
 are documented in the [architecture benchmark](https://github.com/dcc-mcp/dcc-mcp-unity/blob/main/docs/architecture-benchmark.md).
 
@@ -57,8 +61,9 @@ scene snapshots, Console reads, and serialized responses have explicit size or l
 Public CI validates Python 3.9 and 3.12 on Windows, macOS, and Linux; validates the bundled skill
 contracts; performs static checks for the UPM package and main-thread/Undo contracts; and builds the
 PyPI artifacts. Trusted pull requests, `main`, and the weekly schedule also compile the UPM package
-and run its command, scene, Undo, and validation tests in Unity 2021.3.45f1 through GameCI. Fork pull
-requests skip the licensed Editor job because GitHub does not expose repository secrets to forks.
+and run its command, scene, Undo, and validation tests through GameCI in Unity 2018.4.36f1,
+2021.3.45f1, and 6000.5.4f1. Fork pull requests skip the licensed Editor jobs because GitHub does
+not expose repository secrets to forks.
 
 ## Development
 

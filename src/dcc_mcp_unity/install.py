@@ -8,7 +8,7 @@ import shutil
 from pathlib import Path
 
 PACKAGE_NAME = "com.dcc-mcp.unity"
-MIN_UNITY_VERSION = (2021, 3)
+MIN_UNITY_VERSION = (2018, 4, 36)
 _EDITOR_VERSION_PATTERN = re.compile(r"^m_EditorVersion:\s*(\S+)\s*$", re.MULTILINE)
 
 
@@ -27,13 +27,13 @@ def read_unity_version(project: Path) -> str:
 
 
 def _require_supported_unity_version(version: str) -> None:
-    match = re.match(r"^(\d+)\.(\d+)", version)
+    match = re.match(r"^(\d+)\.(\d+)\.(\d+)", version)
     if match is None:
         raise ValueError(f"unsupported Unity version format: {version}")
-    parsed = (int(match.group(1)), int(match.group(2)))
+    parsed = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
     if parsed < MIN_UNITY_VERSION:
         raise ValueError(
-            f"Unity {version} is unsupported; DCC-MCP Unity requires Unity 2021.3 or newer"
+            f"Unity {version} is unsupported; DCC-MCP Unity requires Unity 2018.4.36f1 or newer"
         )
 
 

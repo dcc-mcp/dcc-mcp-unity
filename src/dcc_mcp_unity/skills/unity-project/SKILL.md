@@ -5,7 +5,7 @@ description: >-
   Use for project identity, Unity version, Editor state, active scene, build
   scenes, and asset import refresh. Not for GameObject edits — use unity-scene.
 license: MIT
-compatibility: "Unity 2021.3+; dcc-mcp-core 0.19.45+"
+compatibility: "Unity 2018.4.36f1+ (.NET 4.x); dcc-mcp-core 0.19.45+"
 allowed-tools: "python"
 metadata:
   dcc-mcp:

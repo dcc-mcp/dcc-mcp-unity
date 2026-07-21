@@ -46,7 +46,7 @@ flowchart LR
 6. **Diagnostic loop.** Project inspection reports Editor readiness, and `editor.read_console`
    provides a bounded read-only view of messages captured after package load.
 7. **Version preflight.** The installer reads `ProjectSettings/ProjectVersion.txt` and rejects Unity
-   versions older than 2021.3 before changing the project.
+   versions older than 2018.4.36f1 before changing the project.
 8. **No blind mutation retry.** A timeout is ambiguous: Unity may have completed work near the
    boundary. The workflow requires project and scene inspection before deciding what to do next.
 
@@ -59,8 +59,8 @@ flowchart LR
   concurrent Editors use one adapter and a unique bridge port/URL pair per Editor.
 - Add `tests.run`, build, package, and other cross-domain-reload operations only with a persistent
   job protocol (`request_id`, processing state, reconnect, completion, cancellation).
-- Add licensed Unity CI for the minimum supported 2021.3 release and a Unity 6 release. Static CI is
-  not presented as live Editor proof.
+- Extend the licensed Unity version matrix beyond EditMode only when a new capability needs PlayMode
+  or player-build proof. Static CI is not presented as live Editor proof.
 - Expand authoring in bounded vertical slices: tests/build first, then carefully typed components,
   prefabs, materials, and assets.
 

@@ -1,6 +1,5 @@
 {
   "name": "DccMcp.Unity.Editor.Tests",
-  "rootNamespace": "DccMcp.Unity.Tests",
   "references": [
     "DccMcp.Unity.Editor"
   ],
