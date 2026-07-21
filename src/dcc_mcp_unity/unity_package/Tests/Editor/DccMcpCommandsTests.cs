@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEditor;
@@ -27,13 +28,22 @@ namespace DccMcp.Unity.Tests
             var created = DccMcpCommands.Execute(
                 "scene.create_game_object",
                 new JObject { ["name"] = "CI Probe" });
-            var instanceId = created.Value<int>("instance_id");
+            var instanceId = created["instance_id"].ToString();
+#if UNITY_6000_5_OR_NEWER
+            Assert.That(created["instance_id"].Type, Is.EqualTo(JTokenType.String));
+#else
+            Assert.That(created["instance_id"].Type, Is.EqualTo(JTokenType.Integer));
+#endif
+            JToken requestId = instanceId;
+#if !UNITY_6000_5_OR_NEWER
+            requestId = int.Parse(instanceId, CultureInfo.InvariantCulture);
+#endif
 
             DccMcpCommands.Execute(
                 "scene.set_transform",
                 new JObject
                 {
-                    ["instance_id"] = instanceId,
+                    ["instance_id"] = requestId,
                     ["position"] = new JArray(1, 2, 3),
                 });
 
@@ -56,7 +66,7 @@ namespace DccMcp.Unity.Tests
             var created = DccMcpCommands.Execute(
                 "scene.create_game_object",
                 new JObject { ["name"] = "Undo Probe" });
-            var instanceId = created.Value<int>("instance_id");
+            var instanceId = created["instance_id"].ToString();
 
             Undo.PerformUndo();
 

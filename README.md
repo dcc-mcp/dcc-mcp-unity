@@ -43,7 +43,9 @@ assign each pair a unique bridge port and URL before starting either process.
 1. Load `unity-project` and call `inspect_project` before assuming project or editor state. Stop if
    the returned project is not the intended target or the Editor is compiling, updating, entering
    Play Mode, or playing.
-2. Load `unity-scene` and call `inspect_scene` immediately before using an instance ID.
+2. Load `unity-scene` and call `inspect_scene` immediately before using an instance ID. Treat IDs
+   as opaque values and return them unchanged. Unity 6000.5+ emits decimal strings; older Editors
+   retain integer output, and both forms are accepted as input.
 3. Create GameObjects or change transforms through typed operations backed by Unity Undo.
 4. Verify the hierarchy, then explicitly call `save_scene`.
 5. Load `unity-diagnostics` and call `read_console` after failures or as a final verification step.

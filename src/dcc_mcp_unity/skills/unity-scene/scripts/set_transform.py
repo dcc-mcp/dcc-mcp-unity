@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from dcc_mcp_core.skill import skill_entry, skill_success
 
@@ -7,7 +7,7 @@ from dcc_mcp_unity.bridge import call_host
 
 @skill_entry
 def main(
-    instance_id: int,
+    instance_id: Union[int, str],
     position: Optional[List[float]] = None,
     rotation_euler: Optional[List[float]] = None,
     scale: Optional[List[float]] = None,

@@ -135,8 +135,37 @@ def test_unity_bridge_preserves_main_thread_and_undo_contracts():
     assert "scene.create_game_object" in commands
     assert "CompileAssemblyFromSource" not in bridge + commands
     assert "UNITY_6000_5_OR_NEWER" in identity
+    assert "internal static string GetId" in identity
     assert "GetEntityId" in identity
+    assert "EntityId.ToULong" in identity
+    assert "EntityId.FromULong" in identity
     assert "EntityIdToObject" in identity
+    assert "JTokenType.String" in commands
+    assert "JTokenType.Integer" in commands
+    assert "WriteObjectId" in commands
+
+
+def test_scene_tools_treat_unity_object_ids_as_opaque_values():
+    tools = (ROOT / "src" / "dcc_mcp_unity" / "skills" / "unity-scene" / "tools.yaml").read_text(
+        encoding="utf-8"
+    )
+    create_script = (
+        ROOT
+        / "src"
+        / "dcc_mcp_unity"
+        / "skills"
+        / "unity-scene"
+        / "scripts"
+        / "create_game_object.py"
+    ).read_text(encoding="utf-8")
+    transform_script = (
+        ROOT / "src" / "dcc_mcp_unity" / "skills" / "unity-scene" / "scripts" / "set_transform.py"
+    ).read_text(encoding="utf-8")
+
+    assert tools.count("description: Opaque Unity object ID") == 2
+    assert tools.count("oneOf:") >= 2
+    assert "Union[int, str]" in create_script
+    assert "Union[int, str]" in transform_script
 
 
 def test_unity_ci_serializes_license_and_pins_secret_consumers():

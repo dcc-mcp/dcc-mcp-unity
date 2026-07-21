@@ -25,7 +25,12 @@ tools:
       required: [name]
       properties:
         name: {type: string, minLength: 1, maxLength: 120}
-        parent_instance_id: {type: integer, default: 0}
+        parent_instance_id:
+          description: Opaque Unity object ID from inspect_scene; integer input remains accepted for compatibility.
+          oneOf:
+            - {type: string, pattern: "^-?[0-9]+$", maxLength: 20}
+            - {type: integer}
+          default: 0
       additionalProperties: false
     output_schema: {type: object}
     read_only: false
@@ -45,7 +50,11 @@ tools:
       type: object
       required: [instance_id]
       properties:
-        instance_id: {type: integer}
+        instance_id:
+          description: Opaque Unity object ID from inspect_scene; integer input remains accepted for compatibility.
+          oneOf:
+            - {type: string, pattern: "^-?[0-9]+$", maxLength: 20}
+            - {type: integer}
         position:
           type: array
           items: {type: number}
