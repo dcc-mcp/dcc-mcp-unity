@@ -71,9 +71,9 @@ def test_bundled_skills_release_and_upm_package_exist():
         "file:../../../src/dcc_mcp_unity/unity_package"
     )
     assert legacy_manifest["testables"] == ["com.dcc-mcp.unity"]
-    assert "2018.4.36f1" in (
-        legacy_project / "ProjectSettings" / "ProjectVersion.txt"
-    ).read_text(encoding="utf-8")
+    assert "2018.4.36f1" in (legacy_project / "ProjectSettings" / "ProjectVersion.txt").read_text(
+        encoding="utf-8"
+    )
 
     for skill in skills.iterdir():
         if skill.is_dir():
