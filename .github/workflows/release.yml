@@ -55,7 +55,7 @@ jobs:
 
   standalone:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || matrix.os == inputs.platform) }}
     strategy:
       fail-fast: false
       matrix:
@@ -64,9 +64,6 @@ jobs:
           - os: windows-latest
           - os: macos-latest
     runs-on: ${{ matrix.os }}
-    # Manual rebuilds can target a single failed platform without recompiling
-    # already-uploaded assets.
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || matrix.os == inputs.platform }}
     permissions:
       contents: write
     steps:
