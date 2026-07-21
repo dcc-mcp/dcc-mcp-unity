@@ -5,7 +5,7 @@ description: >-
   GameObject operations. Use for hierarchy, object creation, transforms, and
   scene saves. Not for asset imports — use unity-project.
 license: MIT
-compatibility: "Unity 2018.4.36f1+ (.NET 4.x); dcc-mcp-core 0.19.45+"
+compatibility: "Unity 2018.4.25f1+ (.NET 4.x); dcc-mcp-core 0.19.45+"
 allowed-tools: "python"
 metadata:
   dcc-mcp:

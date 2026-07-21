@@ -33,8 +33,8 @@ jobs:
       matrix:
         include:
           - label: "2018.4"
-            unity-version: 2018.4.36f1
-            image: unityci/editor:ubuntu-2018.4.36f1-base-3.2.2@sha256:83e40412a732421a2630659f5fe549cab1cc4935f3018599bb8e4b89238c7fc5
+            unity-version: 2018.4.25f1
+            image: unityci/editor:ubuntu-2018.4.25f1-base-3.2.2@sha256:aa158ceb3d873614c03b095a803cbffef5971e98e2b2bc77435c73004ca91aeb
             artifact-key: "2018.4"
             package_mode: false
             project_path: tests/unity-2018-project

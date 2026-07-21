@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Unity Editor 2018.4.36f1 or newer
+- Unity Editor 2018.4.25f1 or newer
 - The .NET 4.x Equivalent scripting runtime when using Unity 2018.4
 - Python 3.9 or newer
 - A Unity project with `Assets/` and `ProjectSettings/` directories
@@ -15,7 +15,7 @@ dcc-mcp-unity-install /path/to/UnityProject
 ```
 
 The installer reads `ProjectSettings/ProjectVersion.txt` and rejects projects older than Unity
-2018.4.36f1 before changing `Packages/`.
+2018.4.25f1 before changing `Packages/`.
 
 Open or restart the Unity project and wait for Package Manager to compile **DCC-MCP Unity**.
 Start the Python adapter in a separate terminal:

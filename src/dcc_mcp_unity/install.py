@@ -8,7 +8,7 @@ import shutil
 from pathlib import Path
 
 PACKAGE_NAME = "com.dcc-mcp.unity"
-MIN_UNITY_VERSION = (2018, 4, 36)
+MIN_UNITY_VERSION = (2018, 4, 25)
 MIN_UNITY_RELEASE = ("f", 1)
 _EDITOR_VERSION_PATTERN = re.compile(r"^m_EditorVersion:\s*(\S+)\s*$", re.MULTILINE)
 _UNITY_VERSION_PATTERN = re.compile(
@@ -51,7 +51,7 @@ def _require_supported_unity_version(version: str) -> None:
     )
     if parsed < minimum:
         raise ValueError(
-            f"Unity {version} is unsupported; DCC-MCP Unity requires Unity 2018.4.36f1 or newer"
+            f"Unity {version} is unsupported; DCC-MCP Unity requires Unity 2018.4.25f1 or newer"
         )
 
 
