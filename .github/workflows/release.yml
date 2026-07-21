@@ -57,8 +57,11 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
+            asset_suffix: linux-X64
           - os: windows-latest
+            asset_suffix: windows-X64
           - os: macos-latest
+            asset_suffix: macOS-ARM64
     runs-on: ${{ matrix.os }}
     permissions:
       contents: write
@@ -78,14 +81,14 @@ jobs:
         if: runner.os != 'Windows'
         shell: bash
         run: |
-          archive="dcc-mcp-unity-${{ needs.release-please.outputs.tag_name || inputs.tag_name }}-${RUNNER_OS}-${RUNNER_ARCH}.tar.gz"
+          archive="dcc-mcp-unity-${{ needs.release-please.outputs.tag_name || inputs.tag_name }}-${{ matrix.asset_suffix }}.tar.gz"
           tar -czf "$archive" -C dist/standalone .
           echo "ASSET=$archive" >> "$GITHUB_ENV"
       - name: Archive standalone (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $archive = "dcc-mcp-unity-${{ needs.release-please.outputs.tag_name || inputs.tag_name }}-windows-${env:RUNNER_ARCH}.zip"
+          $archive = "dcc-mcp-unity-${{ needs.release-please.outputs.tag_name || inputs.tag_name }}-${{ matrix.asset_suffix }}.zip"
           Compress-Archive -Path dist/standalone/* -DestinationPath $archive
           "ASSET=$archive" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Upload standalone release asset (Unix)
