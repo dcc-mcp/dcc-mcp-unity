@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.4.1...v0.5.0) (2026-07-21)
+
+
+### Features
+
+* add durable Unity game authoring tools ([#11](https://github.com/dcc-mcp/dcc-mcp-unity/issues/11)) ([936eac2](https://github.com/dcc-mcp/dcc-mcp-unity/commit/936eac2d417806c4fa20119c99bf33995dd2ec1f))
+
 ## [0.4.1](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.4.0...v0.4.1) (2026-07-21)
 
 
