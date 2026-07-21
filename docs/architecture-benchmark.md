@@ -21,12 +21,13 @@ flowchart LR
     A["Agent / DCC-MCP gateway"] --> B["Typed live Editor adapter"]
     B --> C["Loopback WebSocket"]
     C --> D["Unity Editor main thread"]
-    A -. "future approved jobs" .-> E["Optional Unity toolchain backend"]
-    E -. "fixed argv only" .-> F["unity-cli / Unity batch mode"]
+    D --> E["SessionState job ledger"]
+    E --> F["Bounded Unity APIs"]
 ```
 
-- The live plane owns low-latency inspection and undoable Editor authoring.
-- A future toolchain plane may own project creation, compile, test, and build jobs.
+- The live plane owns low-latency inspection, undoable Editor authoring, and a small persistent job
+  surface for source upsert, refresh/compile, Play Mode, Windows build, and Game View capture.
+- Jobs call fixed Unity APIs in the already-open Editor; they do not launch another process.
 - Hub installation, license management, arbitrary Editor arguments, and credentials are not normal
   MCP tools.
 
@@ -49,6 +50,25 @@ flowchart LR
    versions older than 2018.4.25f1 before changing the project.
 8. **No blind mutation retry.** A timeout is ambiguous: Unity may have completed work near the
    boundary. The workflow requires project and scene inspection before deciding what to do next.
+9. **Persistent bounded jobs.** A UUID-keyed `SessionState` ledger survives domain reload, deduplicates
+   identical requests, rejects changed parameters, serializes mutations, and reports only observed
+   queued/running/succeeded/failed state.
+10. **Constrained source and artifact paths.** Source writes are operator-gated, CAS-protected
+    256-KiB UTF-8 atomic replacements below `Assets`. A cooperative per-asset lock serializes
+    DCC-MCP writers, opened handles verify bounded reads, and a detected replacement conflict keeps
+    displaced bytes in a unique conflict backup without an automatic rollback. Preflight reparse
+    checks reject ordinary junction and symlink paths. A same-user process that ignores the lock or
+    swaps a reparse point between validation and operating-system path resolution is outside this
+    in-process threat boundary. Builds and captures use fixed request-specific paths below
+    `Builds/DccMcp`.
+
+### Play Mode reconnect behavior
+
+Unity 2018 normally reloads Editor assemblies while entering or leaving Play Mode. The Editor-side
+WebSocket therefore disconnects, the bridge may time out, and the reloaded package reconnects. The
+job ledger records `waiting_for_play_mode` in `SessionState` before requesting the transition, so
+the reconnecting package resumes observation and the caller inspects the same `request_id`. Socket
+disconnect, command timeout, and domain reload are deliberately not treated as success.
 
 ## Deferred extensions
 
@@ -57,12 +77,12 @@ flowchart LR
   project creation, compile, test, build, or GUI launch.
 - Add core-supported multi-instance routing keyed by project hash and session ID. Until then,
   concurrent Editors use one adapter and a unique bridge port/URL pair per Editor.
-- Add `tests.run`, build, package, and other cross-domain-reload operations only with a persistent
-  job protocol (`request_id`, processing state, reconnect, completion, cancellation).
+- Add `tests.run` or package operations only when they can reuse the persistent job protocol and
+  expose an equally fixed input/output surface.
 - Extend the licensed Unity version matrix beyond EditMode only when a new capability needs PlayMode
   or player-build proof. Static CI is not presented as live Editor proof.
-- Expand authoring in bounded vertical slices: tests/build first, then carefully typed components,
-  prefabs, materials, and assets.
+- Expand authoring only in bounded vertical slices such as typed components, prefabs, materials,
+  and imported binary assets.
 
 ## Capabilities intentionally rejected
 

@@ -1,24 +1,50 @@
 using System;
+using System.Collections;
+using System.IO;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.TestTools;
 
 namespace DccMcp.Unity.Tests
 {
     public sealed class DccMcpCommandsTests
     {
+        private const string SourceWriteGate = "DCC_MCP_UNITY_ALLOW_SOURCE_WRITES";
+        private string originalSourceWriteGate;
+        private EditorBuildSettingsScene[] originalBuildScenes;
+
         [SetUp]
         public void SetUp()
         {
+            originalSourceWriteGate = Environment.GetEnvironmentVariable(SourceWriteGate);
+            originalBuildScenes = EditorBuildSettings.scenes;
+            SessionState.EraseString(DccMcpJobs.SessionStateKey);
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         }
 
         [TearDown]
         public void TearDown()
         {
+            Environment.SetEnvironmentVariable(SourceWriteGate, originalSourceWriteGate);
+            EditorBuildSettings.scenes = originalBuildScenes;
+            SessionState.EraseString(DccMcpJobs.SessionStateKey);
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            if (AssetDatabase.IsValidFolder("Assets/DccMcpJobTests"))
+            {
+                AssetDatabase.DeleteAsset("Assets/DccMcpJobTests");
+            }
+            else
+            {
+                var testDirectory = Path.Combine(Application.dataPath, "DccMcpJobTests");
+                if (Directory.Exists(testDirectory))
+                {
+                    Directory.Delete(testDirectory, true);
+                }
+            }
+            AssetDatabase.Refresh();
         }
 
         [Test]
@@ -89,6 +115,421 @@ namespace DccMcp.Unity.Tests
                     new JObject { ["max_nodes"] = 0 }),
                 Throws.TypeOf<InvalidOperationException>()
                     .With.Message.EqualTo("max_nodes must be between 1 and 5000."));
+        }
+
+        [Test]
+        public void TextAssetWritesRequireTheOperatorGateAndBoundedAssetPath()
+        {
+            Environment.SetEnvironmentVariable(SourceWriteGate, null);
+            Assert.That(
+                () => DccMcpCommands.Execute(
+                    "assets.upsert_text",
+                    new JObject
+                    {
+                        ["request_id"] = Guid.NewGuid().ToString("D"),
+                        ["path"] = "Assets/DccMcpJobTests/Probe.cs",
+                        ["content"] = "class Probe {}",
+                        ["expected_sha256"] = "absent",
+                    }),
+                Throws.TypeOf<InvalidOperationException>()
+                    .With.Message.Contains("DCC_MCP_UNITY_ALLOW_SOURCE_WRITES=1"));
+
+            Assert.That(
+                () => DccMcpCommands.Execute(
+                    "assets.read_text",
+                    new JObject { ["path"] = "Assets/../ProjectSettings/ProjectVersion.txt" }),
+                Throws.TypeOf<InvalidOperationException>());
+
+            var testDirectory = Path.Combine(Application.dataPath, "DccMcpJobTests");
+            Directory.CreateDirectory(testDirectory);
+            File.WriteAllText(Path.Combine(testDirectory, "Control.txt"), "unsafe\0text");
+            Assert.That(
+                () => DccMcpCommands.Execute(
+                    "assets.read_text",
+                    new JObject { ["path"] = "Assets/DccMcpJobTests/Control.txt" }),
+                Throws.TypeOf<InvalidOperationException>()
+                    .With.Message.Contains("control characters"));
+        }
+
+        [Test]
+        public void JobSubmissionRejectsUnknownInputsUtf8OverflowAndConcurrency()
+        {
+            Environment.SetEnvironmentVariable(SourceWriteGate, "1");
+            var requestId = Guid.NewGuid().ToString("D");
+            var write = new JObject
+            {
+                ["request_id"] = requestId,
+                ["path"] = "Assets/DccMcpJobTests/Probe.txt",
+                ["content"] = "text",
+                ["expected_sha256"] = "absent",
+                ["extra"] = true,
+            };
+            Assert.That(
+                () => DccMcpCommands.Execute("assets.upsert_text", write),
+                Throws.TypeOf<InvalidOperationException>()
+                    .With.Message.Contains("Unexpected parameter"));
+
+            write.Remove("extra");
+            write["content"] = "unsafe\0text";
+            Assert.That(
+                () => DccMcpCommands.Execute("assets.upsert_text", write),
+                Throws.TypeOf<InvalidOperationException>()
+                    .With.Message.Contains("control characters"));
+
+            write["content"] = new string('\u00e9', 131073);
+            Assert.That(
+                () => DccMcpCommands.Execute("assets.upsert_text", write),
+                Throws.TypeOf<InvalidOperationException>()
+                    .With.Message.Contains("256 KiB"));
+
+            write["content"] = "text";
+            DccMcpCommands.Execute("assets.upsert_text", write);
+            Assert.That(
+                () => DccMcpCommands.Execute(
+                    "project.refresh_and_compile",
+                    new JObject { ["request_id"] = Guid.NewGuid().ToString("D") }),
+                Throws.TypeOf<InvalidOperationException>()
+                    .With.Message.Contains("queued or running"));
+        }
+
+        [Test]
+        public void JobStoreParsingPreservesRoundTripUtcTimestampsAsStrings()
+        {
+            var timestamp = DateTime.UtcNow.ToString("O");
+            var serialized = new JObject
+            {
+                ["jobs"] = new JArray
+                {
+                    new JObject
+                    {
+                        ["created_at_utc"] = timestamp,
+                        ["updated_at_utc"] = timestamp,
+                    },
+                },
+            }.ToString(Newtonsoft.Json.Formatting.None);
+
+            var parsed = DccMcpJobs.ParseStore(serialized);
+            var job = (JObject)((JArray)parsed["jobs"])[0];
+
+            Assert.That(job["created_at_utc"].Type, Is.EqualTo(JTokenType.String));
+            Assert.That((string)job["created_at_utc"], Is.EqualTo(timestamp));
+            Assert.That(job["updated_at_utc"].Type, Is.EqualTo(JTokenType.String));
+        }
+
+        [Test]
+        public void TextAssetLimitFitsBothBridgeDirectionsAfterJsonEscaping()
+        {
+            Assert.That(
+                DccMcpBridge.MaxEscapedTextEnvelopeBytes,
+                Is.LessThanOrEqualTo(DccMcpBridge.MaxInboundMessageBytes));
+            Assert.That(
+                DccMcpBridge.MaxEscapedTextEnvelopeBytes,
+                Is.LessThanOrEqualTo(DccMcpBridge.MaxOutboundMessageBytes));
+        }
+
+        [Test]
+        public void EnabledBuildScenesMustExistAndHaveNoUnsavedOpenChanges()
+        {
+            var testDirectory = Path.Combine(Application.dataPath, "DccMcpJobTests");
+            Directory.CreateDirectory(testDirectory);
+            var invalidScenePath = "Assets/DccMcpJobTests/NotAScene.txt";
+            File.WriteAllText(Path.Combine(testDirectory, "NotAScene.txt"), "not a scene");
+            AssetDatabase.ImportAsset(invalidScenePath);
+            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(invalidScenePath, true) };
+            Assert.That(
+                () => DccMcpJobs.ValidateEnabledBuildScenes(),
+                Throws.TypeOf<InvalidOperationException>()
+                    .With.Message.Contains("saved .unity asset"));
+
+            var scenePath = "Assets/DccMcpJobTests/BuildScene.unity";
+            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            Assert.That(EditorSceneManager.SaveScene(scene, scenePath), Is.True);
+            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(scenePath, true) };
+
+            Assert.That(DccMcpJobs.ValidateEnabledBuildScenes(), Is.EqualTo(new[] { scenePath }));
+
+            new GameObject("Unsaved change");
+            EditorSceneManager.MarkSceneDirty(scene);
+            Assert.That(
+                () => DccMcpJobs.ValidateEnabledBuildScenes(),
+                Throws.TypeOf<InvalidOperationException>()
+                    .With.Message.Contains("unsaved changes"));
+        }
+
+        [Test]
+        public void PngValidationRequiresARealDecodableImage()
+        {
+            var projectPath = Path.GetDirectoryName(Application.dataPath) ?? string.Empty;
+            var directory = Path.Combine(
+                projectPath,
+                "Library",
+                "DccMcpUnityPng-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(directory);
+            var validPath = Path.Combine(directory, "valid.png");
+            var fakePath = Path.Combine(directory, "fake.png");
+            var texture = new Texture2D(2, 3, TextureFormat.RGBA32, false);
+            try
+            {
+                File.WriteAllBytes(validPath, ImageConversion.EncodeToPNG(texture));
+                File.WriteAllBytes(fakePath, new byte[]
+                {
+                    137, 80, 78, 71, 13, 10, 26, 10,
+                    0, 0, 0, 13, 73, 72, 68, 82,
+                    0, 0, 0, 1, 0, 0, 0, 1,
+                    0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+                });
+
+                int width;
+                int height;
+                Assert.That(DccMcpJobs.TryDecodePng(validPath, out width, out height), Is.True);
+                Assert.That(width, Is.EqualTo(2));
+                Assert.That(height, Is.EqualTo(3));
+                Assert.That(DccMcpJobs.TryDecodePng(fakePath, out width, out height), Is.False);
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(texture);
+                Directory.Delete(directory, true);
+            }
+        }
+
+        [Test]
+        public void PngValidationRejectsFilesAboveTheCaptureBudgetBeforeDecode()
+        {
+            var projectPath = Path.GetDirectoryName(Application.dataPath) ?? string.Empty;
+            var directory = Path.Combine(
+                projectPath,
+                "Library",
+                "DccMcpUnityOversize-" + Guid.NewGuid().ToString("N"));
+            var path = Path.Combine(directory, "oversize.png");
+            try
+            {
+                Directory.CreateDirectory(directory);
+                using (var stream = new FileStream(path, FileMode.CreateNew, FileAccess.Write))
+                {
+                    stream.SetLength(DccMcpJobs.MaxCaptureBytes + 1L);
+                }
+
+                int width;
+                int height;
+                Assert.That(DccMcpJobs.TryDecodePng(path, out width, out height), Is.False);
+            }
+            finally
+            {
+                if (File.Exists(path))
+                {
+                    File.Delete(path);
+                }
+                if (Directory.Exists(directory))
+                {
+                    Directory.Delete(directory, true);
+                }
+            }
+        }
+
+        [Test]
+        public void CaptureReaderRejectsLengthChangesAfterTheInitialCheck()
+        {
+            byte[] bytes;
+            using (var shortened = new MemoryStream(new byte[32], false))
+            {
+                Assert.That(
+                    DccMcpJobs.TryReadExactCapture(shortened, 33, out bytes),
+                    Is.False);
+                Assert.That(bytes, Is.Null);
+            }
+
+            using (var grown = new MemoryStream(new byte[34], false))
+            {
+                Assert.That(
+                    DccMcpJobs.TryReadExactCapture(grown, 33, out bytes),
+                    Is.False);
+                Assert.That(bytes, Is.Null);
+            }
+        }
+
+        [Test]
+        public void CaptureReaderFailsClosedWhenTheStreamReadThrows()
+        {
+            byte[] bytes;
+            using (var stream = new ThrowingReadStream(33))
+            {
+                Assert.That(
+                    DccMcpJobs.TryReadExactCapture(stream, stream.Length, out bytes),
+                    Is.False);
+                Assert.That(bytes, Is.Null);
+            }
+        }
+
+        [Test]
+        public void CaptureDimensionsAllowEightKUhdButRejectOversizedImages()
+        {
+            Assert.That(DccMcpJobs.AreCaptureDimensionsAllowed(7680, 4320), Is.True);
+            Assert.That(DccMcpJobs.AreCaptureDimensionsAllowed(8193, 1), Is.False);
+            Assert.That(DccMcpJobs.AreCaptureDimensionsAllowed(8192, 4097), Is.False);
+            Assert.That(DccMcpJobs.AreCaptureDimensionsAllowed(0, 1080), Is.False);
+        }
+
+        [Test]
+        public void CaptureRejectsPausedPlayModeWithAnActionableError()
+        {
+            var exception = Assert.Throws<InvalidOperationException>(
+                () => DccMcpJobs.EnsureCaptureCanAdvance(true, true));
+
+            Assert.That(exception.Message, Does.Contain("Resume Play Mode"));
+            Assert.That(exception.Message, Does.Contain("new request_id"));
+        }
+
+        [Test]
+        public void PlayModeWaitingStateIsPersistedBeforeTheTransitionRequest()
+        {
+            var timestamp = DateTime.UtcNow.ToString("O");
+            var job = new JObject
+            {
+                ["phase"] = "starting",
+                ["updated_at_utc"] = timestamp,
+            };
+            var store = new JObject { ["jobs"] = new JArray { job } };
+            var observedPersistedWaitingState = false;
+
+            DccMcpJobs.PersistPlayModeTransition(
+                store,
+                job,
+                () =>
+                {
+                    var persisted = DccMcpJobs.ParseStore(
+                        SessionState.GetString(DccMcpJobs.SessionStateKey, string.Empty));
+                    var persistedJob = (JObject)((JArray)persisted["jobs"])[0];
+                    observedPersistedWaitingState =
+                        (string)persistedJob["phase"] == "waiting_for_play_mode";
+                });
+
+            Assert.That(observedPersistedWaitingState, Is.True);
+        }
+
+        [Test]
+        public void CasConflictPreservesBackupWithoutOverwritingALaterExternalWrite()
+        {
+            var directory = Path.Combine(Application.dataPath, "DccMcpJobTests", "CasConflict");
+            Directory.CreateDirectory(directory);
+            var targetPath = Path.Combine(directory, "Probe.txt");
+            var temporaryPath = targetPath + ".tmp";
+            var backupPath = targetPath + ".backup";
+            File.WriteAllText(targetPath, "external write B\n");
+            File.WriteAllText(temporaryPath, "DCC-MCP desired write\n");
+
+            Assert.That(
+                () => DccMcpJobs.ReplaceExistingFileWithCas(
+                    "Assets/DccMcpJobTests/CasConflict/Probe.txt",
+                    temporaryPath,
+                    targetPath,
+                    backupPath,
+                    new string('0', 64),
+                    () => File.WriteAllText(targetPath, "later external write C\n")),
+                Throws.TypeOf<InvalidOperationException>()
+                    .With.Message.Contains("preserved conflict backup"));
+            Assert.That(File.ReadAllText(targetPath), Is.EqualTo("later external write C\n"));
+            Assert.That(File.ReadAllText(backupPath), Is.EqualTo("external write B\n"));
+        }
+
+        [UnityTest]
+        public IEnumerator TextAssetJobUsesCasAndRequestIdDeduplication()
+        {
+            Environment.SetEnvironmentVariable(SourceWriteGate, "1");
+            var requestId = Guid.NewGuid().ToString("D");
+            var parameters = new JObject
+            {
+                ["request_id"] = requestId,
+                ["path"] = "Assets/DccMcpJobTests/Probe.txt",
+                ["content"] = "bounded text\n",
+                ["expected_sha256"] = "absent",
+            };
+
+            var submitted = DccMcpCommands.Execute("assets.upsert_text", parameters);
+            Assert.That((string)submitted["state"], Is.EqualTo("queued"));
+
+            JObject status = null;
+            for (var frame = 0; frame < 10; frame++)
+            {
+                yield return null;
+                status = DccMcpCommands.Execute(
+                    "jobs.inspect",
+                    new JObject { ["request_id"] = requestId });
+                if ((string)status["state"] == "succeeded")
+                {
+                    break;
+                }
+            }
+            Assert.That((string)status["state"], Is.EqualTo("succeeded"));
+
+            var read = DccMcpCommands.Execute(
+                "assets.read_text",
+                new JObject { ["path"] = "Assets/DccMcpJobTests/Probe.txt" });
+            Assert.That((string)read["content"], Is.EqualTo("bounded text\n"));
+            Assert.That(((string)read["sha256"]).Length, Is.EqualTo(64));
+
+            var update = (JObject)parameters.DeepClone();
+            update["request_id"] = Guid.NewGuid().ToString("D");
+            update["content"] = "updated text\n";
+            update["expected_sha256"] = read["sha256"].DeepClone();
+            DccMcpCommands.Execute("assets.upsert_text", update);
+            for (var frame = 0; frame < 10; frame++)
+            {
+                yield return null;
+                status = DccMcpCommands.Execute(
+                    "jobs.inspect",
+                    new JObject { ["request_id"] = update["request_id"].DeepClone() });
+                if ((string)status["state"] == "succeeded")
+                {
+                    break;
+                }
+            }
+            Assert.That((string)status["state"], Is.EqualTo("succeeded"));
+            read = DccMcpCommands.Execute(
+                "assets.read_text",
+                new JObject { ["path"] = "Assets/DccMcpJobTests/Probe.txt" });
+            Assert.That((string)read["content"], Is.EqualTo("updated text\n"));
+
+            var duplicate = DccMcpCommands.Execute("assets.upsert_text", parameters);
+            Assert.That((string)duplicate["state"], Is.EqualTo("succeeded"));
+
+            var staleCreate = (JObject)parameters.DeepClone();
+            staleCreate["request_id"] = Guid.NewGuid().ToString("D");
+            var staleSubmitted = DccMcpCommands.Execute("assets.upsert_text", staleCreate);
+            Assert.That((string)staleSubmitted["state"], Is.EqualTo("queued"));
+            for (var frame = 0; frame < 10; frame++)
+            {
+                yield return null;
+                status = DccMcpCommands.Execute(
+                    "jobs.inspect",
+                    new JObject { ["request_id"] = staleCreate["request_id"].DeepClone() });
+                if ((string)status["state"] == "failed")
+                {
+                    break;
+                }
+            }
+            Assert.That((string)status["state"], Is.EqualTo("failed"));
+            Assert.That((string)status["error"], Does.Contain("CAS mismatch"));
+
+            var changed = (JObject)parameters.DeepClone();
+            changed["content"] = "different\n";
+            Assert.That(
+                () => DccMcpCommands.Execute("assets.upsert_text", changed),
+                Throws.TypeOf<InvalidOperationException>()
+                    .With.Message.Contains("same request_id"));
+        }
+
+        private sealed class ThrowingReadStream : MemoryStream
+        {
+            internal ThrowingReadStream(int length)
+                : base(new byte[length], false)
+            {
+            }
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                throw new IOException("Deterministic capture read failure.");
+            }
         }
     }
 }

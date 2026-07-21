@@ -29,3 +29,225 @@ tools:
     next-tools:
       on-success: [unity_project__inspect_project]
       on-failure: [dcc_diagnostics__screenshot, dcc_diagnostics__audit_log]
+  - name: read_text_asset
+    description: Read one bounded UTF-8 source text asset below Assets without following reparse points. Accepted extensions are cs, json, txt, shader, cginc, asmdef, xml, uss, and uxml. Not for binary assets or arbitrary project files.
+    input_schema:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: string
+          maxLength: 512
+          pattern: '^Assets(?:/(?!\.{1,2}(?:/|$))[^/\\]+)+\.(?:cs|json|txt|shader|cginc|asmdef|xml|uss|uxml)$'
+      additionalProperties: false
+    output_schema: {type: object}
+    execution: sync
+    affinity: main
+    enforce_thread_affinity: true
+    timeout_hint_secs: 60
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
+    source_file: scripts/read_text_asset.py
+    next-tools:
+      on-success: [unity_project__upsert_text_asset]
+      on-failure: [unity_diagnostics__read_console, dcc_diagnostics__audit_log]
+  - name: upsert_text_asset
+    description: Queue an atomic CAS-protected UTF-8 source write below Assets. Requires the operator-owned DCC_MCP_UNITY_ALLOW_SOURCE_WRITES=1 environment gate; expected_sha256 is absent for create or the current lowercase digest for update. The call returns queued, running, succeeded, or failed job state, never synthetic completion.
+    input_schema:
+      type: object
+      required: [request_id, path, content, expected_sha256]
+      properties:
+        request_id:
+          type: string
+          pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        path:
+          type: string
+          maxLength: 512
+          pattern: '^Assets(?:/(?!\.{1,2}(?:/|$))[^/\\]+)+\.(?:cs|json|txt|shader|cginc|asmdef|xml|uss|uxml)$'
+        content:
+          type: string
+          maxLength: 262144
+          description: UTF-8 payload; the wrapper and Editor reject JSON-unsafe control characters and enforce a 256 KiB encoded-byte ceiling so worst-case escaping stays inside the bridge limit.
+        expected_sha256:
+          type: string
+          pattern: '^(?:absent|[0-9a-f]{64})$'
+      additionalProperties: false
+    output_schema:
+      type: object
+      required: [success, message, prompt, error, context]
+      properties:
+        success: {type: boolean}
+        message: {type: string}
+        prompt: {type: [string, "null"]}
+        error: {type: [string, "null"]}
+        context:
+          type: object
+          properties:
+            state: {type: string, enum: [queued, running, succeeded, failed]}
+            phase: {type: string}
+      allOf:
+        - if:
+            properties:
+              success: {const: true}
+            required: [success]
+          then:
+            properties:
+              context:
+                required: [state, phase]
+    execution: sync
+    affinity: main
+    enforce_thread_affinity: true
+    timeout_hint_secs: 60
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
+    source_file: scripts/upsert_text_asset.py
+    next-tools:
+      on-success: [unity_diagnostics__inspect_job]
+      on-failure: [unity_diagnostics__read_console, dcc_diagnostics__audit_log]
+  - name: refresh_and_compile
+    description: Queue AssetDatabase refresh and wait across domain reload until Unity becomes idle, reporting script compilation failure instead of claiming synchronous completion. Poll inspect_job with the same request_id.
+    input_schema:
+      type: object
+      required: [request_id]
+      properties:
+        request_id:
+          type: string
+          pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+      additionalProperties: false
+    output_schema:
+      type: object
+      required: [success, message, prompt, error, context]
+      properties:
+        success: {type: boolean}
+        message: {type: string}
+        prompt: {type: [string, "null"]}
+        error: {type: [string, "null"]}
+        context:
+          type: object
+          properties:
+            state: {type: string, enum: [queued, running, succeeded, failed]}
+            phase: {type: string}
+      allOf:
+        - if:
+            properties:
+              success: {const: true}
+            required: [success]
+          then:
+            properties:
+              context:
+                required: [state, phase]
+    execution: sync
+    affinity: main
+    enforce_thread_affinity: true
+    timeout_hint_secs: 60
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
+    source_file: scripts/refresh_and_compile.py
+    next-tools:
+      on-success: [unity_diagnostics__inspect_job]
+      on-failure: [unity_diagnostics__read_console, dcc_diagnostics__audit_log]
+  - name: set_play_mode
+    description: Queue entry to or exit from Play Mode and persist status across domain reload. Poll inspect_job with the same request_id; use true to play and false to return to Edit Mode.
+    input_schema:
+      type: object
+      required: [request_id, play]
+      properties:
+        request_id:
+          type: string
+          pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        play: {type: boolean}
+      additionalProperties: false
+    output_schema:
+      type: object
+      required: [success, message, prompt, error, context]
+      properties:
+        success: {type: boolean}
+        message: {type: string}
+        prompt: {type: [string, "null"]}
+        error: {type: [string, "null"]}
+        context:
+          type: object
+          properties:
+            state: {type: string, enum: [queued, running, succeeded, failed]}
+            phase: {type: string}
+      allOf:
+        - if:
+            properties:
+              success: {const: true}
+            required: [success]
+          then:
+            properties:
+              context:
+                required: [state, phase]
+    execution: sync
+    affinity: main
+    enforce_thread_affinity: true
+    timeout_hint_secs: 60
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
+    source_file: scripts/set_play_mode.py
+    next-tools:
+      on-success: [unity_diagnostics__inspect_job]
+      on-failure: [unity_diagnostics__read_console, dcc_diagnostics__audit_log]
+  - name: build_windows_player
+    description: Queue a Windows x64 player build from exactly the enabled saved EditorBuildSettings scenes into a new request-specific directory below Builds/DccMcp. The job persistently switches the active target when needed and rejects dirty enabled scenes; poll inspect_job and note that existing outputs are never overwritten.
+    input_schema:
+      type: object
+      required: [request_id]
+      properties:
+        request_id:
+          type: string
+          pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+      additionalProperties: false
+    output_schema:
+      type: object
+      required: [success, message, prompt, error, context]
+      properties:
+        success: {type: boolean}
+        message: {type: string}
+        prompt: {type: [string, "null"]}
+        error: {type: [string, "null"]}
+        context:
+          type: object
+          properties:
+            state: {type: string, enum: [queued, running, succeeded, failed]}
+            phase: {type: string}
+      allOf:
+        - if:
+            properties:
+              success: {const: true}
+            required: [success]
+          then:
+            properties:
+              context:
+                required: [state, phase]
+    execution: sync
+    affinity: main
+    enforce_thread_affinity: true
+    timeout_hint_secs: 60
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
+    source_file: scripts/build_windows_player.py
+    next-tools:
+      on-success: [unity_diagnostics__inspect_job]
+      on-failure: [unity_diagnostics__read_console, dcc_diagnostics__audit_log]

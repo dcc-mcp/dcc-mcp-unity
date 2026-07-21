@@ -47,6 +47,9 @@ Restart Unity so it reloads the package assemblies.
 - `DCC_MCP_UNITY_BRIDGE_PORT` changes the Python WebSocket listener from port `3852`.
 - `DCC_MCP_UNITY_BRIDGE_URL` changes the URL used by the Unity Editor package.
 - `DCC_MCP_UNITY_BRIDGE_TIMEOUT` may increase, but not lower, the 60-second RPC timeout.
+- `DCC_MCP_UNITY_ALLOW_SOURCE_WRITES=1` enables the otherwise-disabled, bounded
+  `upsert_text_asset` capability. Set it in the operator environment before Unity starts; tool
+  arguments cannot enable it.
 
 When changing the bridge port, set both bridge variables before starting the adapter and Unity.
 The default endpoint is single-Editor; concurrent Editors require one adapter and a unique bridge

@@ -36,6 +36,19 @@ namespace DccMcp.Unity
                     case "assets.refresh":
                         result = RefreshAssets();
                         break;
+                    case "assets.read_text":
+                        result = DccMcpJobs.ReadTextAsset(parameters);
+                        break;
+                    case "assets.upsert_text":
+                    case "project.refresh_and_compile":
+                    case "editor.set_play_mode":
+                    case "project.build_windows_player":
+                    case "editor.capture_game_view":
+                        result = DccMcpJobs.Submit(method, parameters);
+                        break;
+                    case "jobs.inspect":
+                        result = DccMcpJobs.Inspect(parameters);
+                        break;
                     case "scene.inspect":
                         result = InspectScene(parameters);
                         break;

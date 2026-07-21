@@ -29,7 +29,7 @@ Repository = "https://github.com/dcc-mcp/dcc-mcp-unity"
 Issues = "https://github.com/dcc-mcp/dcc-mcp-unity/issues"
 
 [project.optional-dependencies]
-dev = ["build>=1.2", "pytest>=8", "ruff>=0.8", "twine>=6"]
+dev = ["build>=1.2", "jsonschema>=4", "pytest>=8", "pyyaml>=6", "ruff>=0.8", "twine>=6"]
 
 [project.scripts]
 dcc-mcp-unity = "dcc_mcp_unity.server:main"
