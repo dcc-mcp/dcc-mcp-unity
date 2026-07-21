@@ -38,6 +38,8 @@ def test_bundled_skills_release_and_upm_package_exist():
     assert (ROOT / ".github" / "workflows" / "release.yml").is_file()
     package = json.loads((PACKAGE / "package.json").read_text(encoding="utf-8"))
     assert package["name"] == "com.dcc-mcp.unity"
+    assert package["unity"] == "2018.4"
+    assert package["unityRelease"] == "36f1"
     assert package["dependencies"]["com.unity.nuget.newtonsoft-json"] == "3.2.2"
     assert (PACKAGE / "LICENSE.md").is_file()
 
@@ -45,7 +47,46 @@ def test_bundled_skills_release_and_upm_package_exist():
         (PACKAGE / "Editor" / "DccMcp.Unity.Editor.asmdef").read_text(encoding="utf-8")
     )
     assert assembly["references"] == []
+    assert "rootNamespace" not in assembly
     assert assembly["includePlatforms"] == ["Editor"]
+
+    test_assembly = json.loads(
+        (PACKAGE / "Tests" / "Editor" / "DccMcp.Unity.Editor.Tests.asmdef").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert test_assembly["references"] == ["DccMcp.Unity.Editor"]
+    assert "rootNamespace" not in test_assembly
+    assert test_assembly["overrideReferences"] is True
+    assert test_assembly["precompiledReferences"] == ["Newtonsoft.Json.dll"]
+    assert test_assembly["includePlatforms"] == ["Editor"]
+    assert test_assembly["optionalUnityReferences"] == ["TestAssemblies"]
+    assert (PACKAGE / "Tests" / "Editor" / "DccMcpCommandsTests.cs").is_file()
+
+    legacy_project = ROOT / "tests" / "unity-2018-project"
+    legacy_manifest = json.loads(
+        (legacy_project / "Packages" / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert legacy_manifest["dependencies"]["com.dcc-mcp.unity"] == (
+        "file:../../../src/dcc_mcp_unity/unity_package"
+    )
+    assert legacy_manifest["testables"] == ["com.dcc-mcp.unity"]
+    assert "2018.4.36f1" in (legacy_project / "ProjectSettings" / "ProjectVersion.txt").read_text(
+        encoding="utf-8"
+    )
+
+    latest_project = ROOT / "tests" / "unity-6000-project"
+    latest_manifest = json.loads(
+        (latest_project / "Packages" / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert latest_manifest["dependencies"]["com.dcc-mcp.unity"] == (
+        "file:../../../src/dcc_mcp_unity/unity_package"
+    )
+    assert latest_manifest["dependencies"]["com.unity.test-framework"] == "1.4.6"
+    assert latest_manifest["testables"] == ["com.dcc-mcp.unity"]
+    assert "6000.5.4f1" in (latest_project / "ProjectSettings" / "ProjectVersion.txt").read_text(
+        encoding="utf-8"
+    )
 
     for skill in skills.iterdir():
         if skill.is_dir():
@@ -62,6 +103,7 @@ def test_unity_bridge_preserves_main_thread_and_undo_contracts():
     bridge = (PACKAGE / "Editor" / "DccMcpBridge.cs").read_text(encoding="utf-8")
     commands = (PACKAGE / "Editor" / "DccMcpCommands.cs").read_text(encoding="utf-8")
     console = (PACKAGE / "Editor" / "DccMcpConsole.cs").read_text(encoding="utf-8")
+    identity = (PACKAGE / "Editor" / "DccMcpObjectIdentity.cs").read_text(encoding="utf-8")
     assert "EditorApplication.update += OnEditorUpdate" in bridge
     assert "MaxPendingRequests" in bridge
     assert "RequestQueueLifetime" in bridge
@@ -92,6 +134,53 @@ def test_unity_bridge_preserves_main_thread_and_undo_contracts():
     assert "limit must be an integer" in console
     assert "scene.create_game_object" in commands
     assert "CompileAssemblyFromSource" not in bridge + commands
+    assert "UNITY_6000_5_OR_NEWER" in identity
+    assert "internal static string GetId" in identity
+    assert "GetEntityId" in identity
+    assert "EntityId.ToULong" in identity
+    assert "EntityId.FromULong" in identity
+    assert "EntityIdToObject" in identity
+    assert "JTokenType.String" in commands
+    assert "JTokenType.Integer" in commands
+    assert "WriteObjectId" in commands
+
+
+def test_scene_tools_treat_unity_object_ids_as_opaque_values():
+    tools = (ROOT / "src" / "dcc_mcp_unity" / "skills" / "unity-scene" / "tools.yaml").read_text(
+        encoding="utf-8"
+    )
+    create_script = (
+        ROOT
+        / "src"
+        / "dcc_mcp_unity"
+        / "skills"
+        / "unity-scene"
+        / "scripts"
+        / "create_game_object.py"
+    ).read_text(encoding="utf-8")
+    transform_script = (
+        ROOT / "src" / "dcc_mcp_unity" / "skills" / "unity-scene" / "scripts" / "set_transform.py"
+    ).read_text(encoding="utf-8")
+
+    assert tools.count("description: Opaque Unity object ID") == 2
+    assert tools.count("oneOf:") >= 2
+    assert "Union[int, str]" in create_script
+    assert "Union[int, str]" in transform_script
+
+
+def test_unity_ci_serializes_license_and_pins_secret_consumers():
+    workflow = (ROOT / ".github" / "workflows" / "unity.yml").read_text(encoding="utf-8")
+    static_ci = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    assert "group: unity-personal-license" in workflow
+    assert "cancel-in-progress: false" in workflow
+    assert "max-parallel: 1" in workflow
+    assert "game-ci/unity-test-runner@0ff419b913a3630032cbe0de48a0099b5a9f0ed9" in workflow
+    assert workflow.count("@sha256:") == 3
+    assert "UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}" in workflow
+    assert "useHostNetwork: true" in workflow
+    assert "tools/unity_bridge_smoke.py" in workflow
+    assert "unity-editmode:" not in static_ci
 
 
 def test_runtime_version_matches_distribution_metadata():

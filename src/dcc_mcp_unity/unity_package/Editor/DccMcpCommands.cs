@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -196,7 +197,7 @@ namespace DccMcp.Unity
             return new JObject
             {
                 ["name"] = Truncate(gameObject.name, MaxSnapshotTextCharacters),
-                ["instance_id"] = gameObject.GetInstanceID(),
+                ["instance_id"] = WriteObjectId(DccMcpObjectIdentity.GetId(gameObject)),
                 ["active"] = gameObject.activeSelf,
                 ["tag"] = gameObject.tag,
                 ["layer"] = gameObject.layer,
@@ -207,8 +208,8 @@ namespace DccMcp.Unity
         private static JObject CreateGameObject(JObject parameters)
         {
             var name = RequireString(parameters, "name");
-            var parentId = ReadOptionalInt(parameters, "parent_instance_id", 0);
-            var parent = parentId == 0 ? null : ResolveGameObject(parentId);
+            var parentId = ReadOptionalObjectId(parameters, "parent_instance_id", "0");
+            var parent = parentId == "0" ? null : ResolveGameObject(parentId);
             var gameObject = new GameObject(name);
             Undo.RegisterCreatedObjectUndo(gameObject, "DCC-MCP: Create " + name);
 
@@ -226,14 +227,14 @@ namespace DccMcp.Unity
             {
                 ["created"] = true,
                 ["name"] = gameObject.name,
-                ["instance_id"] = gameObject.GetInstanceID(),
-                ["parent_instance_id"] = parentId,
+                ["instance_id"] = WriteObjectId(DccMcpObjectIdentity.GetId(gameObject)),
+                ["parent_instance_id"] = WriteObjectId(parentId),
             };
         }
 
         private static JObject SetTransform(JObject parameters)
         {
-            var instanceId = RequireInt(parameters, "instance_id");
+            var instanceId = RequireObjectId(parameters, "instance_id");
             var gameObject = ResolveGameObject(instanceId);
             var position = ReadVector3(parameters, "position");
             var rotation = ReadVector3(parameters, "rotation_euler");
@@ -263,7 +264,7 @@ namespace DccMcp.Unity
             return new JObject
             {
                 ["updated"] = true,
-                ["instance_id"] = instanceId,
+                ["instance_id"] = WriteObjectId(instanceId),
                 ["position"] = Vector(gameObject.transform.position),
                 ["rotation_euler"] = Vector(gameObject.transform.eulerAngles),
                 ["scale"] = Vector(gameObject.transform.localScale),
@@ -293,9 +294,9 @@ namespace DccMcp.Unity
             };
         }
 
-        private static GameObject ResolveGameObject(int instanceId)
+        private static GameObject ResolveGameObject(string instanceId)
         {
-            var gameObject = EditorUtility.InstanceIDToObject(instanceId) as GameObject;
+            var gameObject = DccMcpObjectIdentity.Resolve(instanceId) as GameObject;
             if (gameObject == null)
             {
                 throw new InvalidOperationException(
@@ -337,6 +338,50 @@ namespace DccMcp.Unity
         {
             var token = parameters[name];
             return token == null ? defaultValue : ReadInteger(token, name);
+        }
+
+        private static string RequireObjectId(JObject parameters, string name)
+        {
+            var token = parameters[name];
+            if (token == null)
+            {
+                throw new InvalidOperationException(name + " is required.");
+            }
+            return ReadObjectId(token, name);
+        }
+
+        private static string ReadOptionalObjectId(
+            JObject parameters,
+            string name,
+            string defaultValue)
+        {
+            var token = parameters[name];
+            return token == null ? defaultValue : ReadObjectId(token, name);
+        }
+
+        private static string ReadObjectId(JToken token, string name)
+        {
+            if (token.Type != JTokenType.String && token.Type != JTokenType.Integer)
+            {
+                throw new InvalidOperationException(name + " must be a string or integer.");
+            }
+
+            var value = token.Type == JTokenType.String ? (string)token : token.ToString();
+            string normalized;
+            if (!DccMcpObjectIdentity.TryNormalize(value, out normalized))
+            {
+                throw new InvalidOperationException(name + " is not a valid Unity object ID.");
+            }
+            return normalized;
+        }
+
+        private static JToken WriteObjectId(string value)
+        {
+#if UNITY_6000_5_OR_NEWER
+            return new JValue(value);
+#else
+            return new JValue(int.Parse(value, CultureInfo.InvariantCulture));
+#endif
         }
 
         private static int ReadInteger(JToken token, string name)

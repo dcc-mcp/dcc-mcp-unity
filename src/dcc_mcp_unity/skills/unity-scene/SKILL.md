@@ -5,7 +5,7 @@ description: >-
   GameObject operations. Use for hierarchy, object creation, transforms, and
   scene saves. Not for asset imports — use unity-project.
 license: MIT
-compatibility: "Unity 2021.3+; dcc-mcp-core 0.19.45+"
+compatibility: "Unity 2018.4.36f1+ (.NET 4.x); dcc-mcp-core 0.19.45+"
 allowed-tools: "python"
 metadata:
   dcc-mcp:
@@ -20,8 +20,10 @@ metadata:
 
 # Unity Scene
 
-Inspect the hierarchy immediately before using instance IDs; Unity instance IDs are scoped to the
-current Editor session. Object creation and transform edits register with Unity Undo.
+Inspect the hierarchy immediately before using instance IDs. Treat every Unity instance ID as an
+opaque, session-scoped value and return it unchanged; Unity 6000.5+ emits decimal strings while
+older Editors retain integer output for compatibility. Both forms are accepted as input. Object
+creation and transform edits register with Unity Undo.
 
 Do not automatically retry a timed-out mutation. Inspect the project and scene first because the
 Editor may have completed the original request near the timeout boundary.

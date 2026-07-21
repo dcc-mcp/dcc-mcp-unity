@@ -1,0 +1,8 @@
+{
+  "dependencies": {
+    "com.dcc-mcp.unity": "file:../../../src/dcc_mcp_unity/unity_package"
+  },
+  "testables": [
+    "com.dcc-mcp.unity"
+  ]
+}
