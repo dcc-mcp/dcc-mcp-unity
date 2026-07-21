@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.1](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.4.0...v0.4.1) (2026-07-21)
+
+
+### Bug Fixes
+
+* allow standalone asset rebuilds ([11777a0](https://github.com/dcc-mcp/dcc-mcp-unity/commit/11777a07ccc86556b132848a4e29854c899938c3))
+* combine standalone matrix conditions ([5a48692](https://github.com/dcc-mcp/dcc-mcp-unity/commit/5a48692470312dcf6668e51d66229340bb51dee6))
+* keep standalone workflow matrix compatible ([f5dba26](https://github.com/dcc-mcp/dcc-mcp-unity/commit/f5dba26e32e4631865b7e630dd439b464d01ff72))
+* locate PyOxidizer install output ([41169bf](https://github.com/dcc-mcp/dcc-mcp-unity/commit/41169bf6979846c4de93b00929867c4ffb53984b))
+* support macOS standalone rebuild ([cfaa80d](https://github.com/dcc-mcp/dcc-mcp-unity/commit/cfaa80d9460d1fd1492a173066a8df5b29ee7023))
+
 ## [0.4.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.3.0...v0.4.0) (2026-07-21)
 
 
