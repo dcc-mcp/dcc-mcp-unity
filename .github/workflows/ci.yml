@@ -33,14 +33,20 @@ jobs:
             unity-version: 2018.4.36f1
             image: unityci/editor:ubuntu-2018.4.36f1-base-3.2.2
             artifact-key: "2018.4"
+            package_mode: false
+            project_path: tests/unity-2018-project
           - label: "2021.3"
             unity-version: 2021.3.45f1
             image: unityci/editor:ubuntu-2021.3.45f1-linux-il2cpp-3.2.2
             artifact-key: "2021.3"
+            package_mode: true
+            project_path: src/dcc_mcp_unity/unity_package
           - label: "6000.5"
             unity-version: 6000.5.4f1
             image: unityci/editor:ubuntu-6000.5.4f1-linux-il2cpp-3.2.2
             artifact-key: "6000.5"
+            package_mode: true
+            project_path: src/dcc_mcp_unity/unity_package
     permissions:
       contents: read
       checks: write
@@ -53,8 +59,8 @@ jobs:
           UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
           UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
         with:
-          packageMode: true
-          projectPath: src/dcc_mcp_unity/unity_package
+          packageMode: ${{ matrix.package_mode }}
+          projectPath: ${{ matrix.project_path }}
           unityVersion: ${{ matrix.unity-version }}
           customImage: ${{ matrix.image }}
           testMode: EditMode

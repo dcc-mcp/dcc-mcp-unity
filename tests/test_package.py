@@ -63,6 +63,18 @@ def test_bundled_skills_release_and_upm_package_exist():
     assert test_assembly["optionalUnityReferences"] == ["TestAssemblies"]
     assert (PACKAGE / "Tests" / "Editor" / "DccMcpCommandsTests.cs").is_file()
 
+    legacy_project = ROOT / "tests" / "unity-2018-project"
+    legacy_manifest = json.loads(
+        (legacy_project / "Packages" / "manifest.json").read_text(encoding="utf-8")
+    )
+    assert legacy_manifest["dependencies"]["com.dcc-mcp.unity"] == (
+        "file:../../../src/dcc_mcp_unity/unity_package"
+    )
+    assert legacy_manifest["testables"] == ["com.dcc-mcp.unity"]
+    assert "2018.4.36f1" in (
+        legacy_project / "ProjectSettings" / "ProjectVersion.txt"
+    ).read_text(encoding="utf-8")
+
     for skill in skills.iterdir():
         if skill.is_dir():
             dependencies = skill / "metadata" / "depends.md"
