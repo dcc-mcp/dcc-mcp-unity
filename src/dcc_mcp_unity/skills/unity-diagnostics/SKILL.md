@@ -11,7 +11,7 @@ metadata:
   dcc-mcp:
     dcc: unity
     layer: domain
-    version: "0.1.0"  # x-release-please-version
+    version: "0.2.0"  # x-release-please-version
     search-hint: "Unity Console logs errors warnings stack trace diagnostics"
     tags: "unity,console,logs,diagnostics,game-development"
     tools: tools.yaml
