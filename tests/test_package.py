@@ -47,6 +47,16 @@ def test_bundled_skills_release_and_upm_package_exist():
     assert assembly["references"] == []
     assert assembly["includePlatforms"] == ["Editor"]
 
+    test_assembly = json.loads(
+        (PACKAGE / "Tests" / "Editor" / "DccMcp.Unity.Editor.Tests.asmdef").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert test_assembly["references"] == ["DccMcp.Unity.Editor"]
+    assert test_assembly["includePlatforms"] == ["Editor"]
+    assert test_assembly["optionalUnityReferences"] == ["TestAssemblies"]
+    assert (PACKAGE / "Tests" / "Editor" / "DccMcpCommandsTests.cs").is_file()
+
     for skill in skills.iterdir():
         if skill.is_dir():
             dependencies = skill / "metadata" / "depends.md"

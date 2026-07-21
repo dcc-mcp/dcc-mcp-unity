@@ -16,6 +16,40 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  unity-editmode:
+    name: Unity 2021.3 / EditMode
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v6
+      - id: unity-tests
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          packageMode: true
+          projectPath: src/dcc_mcp_unity/unity_package
+          unityVersion: 2021.3.45f1
+          testMode: EditMode
+          artifactsPath: artifacts/unity-2021.3-editmode
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          checkName: Unity 2021.3 / EditMode results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unity-2021.3-editmode-results
+          path: ${{ steps.unity-tests.outputs.artifactsPath }}
+          if-no-files-found: warn
+          retention-days: 14
+
   minimum-core:
     name: Minimum dcc-mcp-core / Python 3.9
     runs-on: ubuntu-latest

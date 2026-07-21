@@ -56,9 +56,9 @@ scene snapshots, Console reads, and serialized responses have explicit size or l
 
 Public CI validates Python 3.9 and 3.12 on Windows, macOS, and Linux; validates the bundled skill
 contracts; performs static checks for the UPM package and main-thread/Undo contracts; and builds the
-PyPI artifacts. Automated live Unity Editor CI is intentionally not claimed because it requires a
-provisioned Unity CI license or activation. A real Editor smoke should be run before promoting the
-adapter from alpha.
+PyPI artifacts. Trusted pull requests, `main`, and the weekly schedule also compile the UPM package
+and run its command, scene, Undo, and validation tests in Unity 2021.3.45f1 through GameCI. Fork pull
+requests skip the licensed Editor job because GitHub does not expose repository secrets to forks.
 
 ## Development
 
