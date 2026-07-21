@@ -9,10 +9,6 @@ on:
         description: "Existing GitHub release tag to rebuild standalone assets for"
         required: true
         default: "v0.4.0"
-      platform:
-        description: "Standalone runner to rebuild (all or one matrix OS)"
-        required: true
-        default: "all"
 
 permissions:
   contents: write
@@ -55,7 +51,7 @@ jobs:
 
   standalone:
     needs: release-please
-    if: ${{ (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') && (github.event_name != 'workflow_dispatch' || inputs.platform == 'all' || matrix.os == inputs.platform) }}
+    if: ${{ needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
     strategy:
       fail-fast: false
       matrix:
