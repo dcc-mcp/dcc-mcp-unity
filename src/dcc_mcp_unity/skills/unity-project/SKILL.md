@@ -11,7 +11,7 @@ metadata:
   dcc-mcp:
     dcc: unity
     layer: domain
-    version: "0.3.0"  # x-release-please-version
+    version: "0.4.0"  # x-release-please-version
     search-hint: "Unity project version build scenes Asset Database refresh"
     tags: "unity,project,assets,game-development"
     tools: tools.yaml
