@@ -10,7 +10,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-BUILD = ROOT / "build" / "pyoxidizer"
+BUILD = ROOT / "build"
 OUTPUT = ROOT / "dist" / "standalone"
 NAME = "dcc-mcp-unity" + (".exe" if sys.platform == "win32" else "")
 
@@ -20,7 +20,11 @@ def _run(command: list[str]) -> None:
 
 
 def _find_binary() -> Path:
-    matches = sorted(BUILD.rglob(NAME)) if BUILD.exists() else []
+    matches = (
+        sorted(path for path in BUILD.rglob(NAME) if "pyoxidizer" not in path.parts)
+        if BUILD.exists()
+        else []
+    )
     if not matches:
         raise FileNotFoundError(f"PyOxidizer did not produce {NAME} under {BUILD}")
     return matches[-1]
