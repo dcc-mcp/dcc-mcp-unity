@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.5.0...v0.5.1) (2026-07-21)
+
+
+### Bug Fixes
+
+* keep Unity bridge responsive while paused ([a435d61](https://github.com/dcc-mcp/dcc-mcp-unity/commit/a435d618207386e03f71d4767e1cd48d28daa81e))
+
 ## [0.5.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.4.1...v0.5.0) (2026-07-21)
 
 
