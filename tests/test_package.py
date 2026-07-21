@@ -53,6 +53,8 @@ def test_bundled_skills_release_and_upm_package_exist():
         )
     )
     assert test_assembly["references"] == ["DccMcp.Unity.Editor"]
+    assert test_assembly["overrideReferences"] is True
+    assert test_assembly["precompiledReferences"] == ["Newtonsoft.Json.dll"]
     assert test_assembly["includePlatforms"] == ["Editor"]
     assert test_assembly["optionalUnityReferences"] == ["TestAssemblies"]
     assert (PACKAGE / "Tests" / "Editor" / "DccMcpCommandsTests.cs").is_file()

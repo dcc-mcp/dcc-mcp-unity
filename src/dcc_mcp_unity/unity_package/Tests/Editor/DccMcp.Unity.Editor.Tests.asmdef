@@ -4,6 +4,10 @@
   "references": [
     "DccMcp.Unity.Editor"
   ],
+  "overrideReferences": true,
+  "precompiledReferences": [
+    "Newtonsoft.Json.dll"
+  ],
   "includePlatforms": [
     "Editor"
   ],
