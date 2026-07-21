@@ -146,6 +146,17 @@ def test_unity_bridge_preserves_main_thread_and_undo_contracts():
     assert "WriteObjectId" in commands
 
 
+def test_unity_bridge_network_awaits_do_not_capture_editor_context():
+    bridge = (PACKAGE / "Editor" / "DccMcpBridge.cs").read_text(encoding="utf-8")
+    awaits = re.findall(r"\bawait\b(.*?);", bridge, re.DOTALL)
+
+    assert awaits
+    assert all(".ConfigureAwait(false)" in expression for expression in awaits)
+    assert "MaxPendingLogs" in bridge
+    assert "PendingLogs.TryDequeue" in bridge
+    assert bridge.index("Debug.Log(log.Message)") > bridge.index("OnEditorUpdate()")
+
+
 def test_scene_tools_treat_unity_object_ids_as_opaque_values():
     tools = (ROOT / "src" / "dcc_mcp_unity" / "skills" / "unity-scene" / "tools.yaml").read_text(
         encoding="utf-8"

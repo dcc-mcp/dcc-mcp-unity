@@ -21,6 +21,7 @@ namespace DccMcp.Unity
         internal const int MaxEscapedTextEnvelopeBytes =
             DccMcpJobs.MaxTextAssetBytes * 3 + 64 * 1024;
         private const int MaxPendingRequests = 256;
+        private const int MaxPendingLogs = 64;
         private static readonly TimeSpan RequestQueueLifetime = TimeSpan.FromSeconds(55);
         private static readonly DateTime UnixEpochUtc =
             new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -74,10 +75,24 @@ namespace DccMcp.Unity
             }
         }
 
+        private sealed class LogItem
+        {
+            internal readonly string Message;
+            internal readonly bool IsWarning;
+
+            internal LogItem(string message, bool isWarning)
+            {
+                Message = message;
+                IsWarning = isWarning;
+            }
+        }
+
         private static readonly ConcurrentQueue<WorkItem> Pending = new ConcurrentQueue<WorkItem>();
+        private static readonly ConcurrentQueue<LogItem> PendingLogs = new ConcurrentQueue<LogItem>();
         private static readonly CancellationTokenSource Lifetime = new CancellationTokenSource();
         private static readonly SemaphoreSlim SendGate = new SemaphoreSlim(1, 1);
         private static int PendingCount;
+        private static int PendingLogCount;
 
         static DccMcpBridge()
         {
@@ -106,7 +121,11 @@ namespace DccMcp.Unity
                 while (Pending.TryDequeue(out _))
                 {
                 }
+                while (PendingLogs.TryDequeue(out _))
+                {
+                }
                 Interlocked.Exchange(ref PendingCount, 0);
+                Interlocked.Exchange(ref PendingLogCount, 0);
             }
         }
 
@@ -123,14 +142,15 @@ namespace DccMcp.Unity
                         var url = string.IsNullOrWhiteSpace(configured)
                             ? "ws://127.0.0.1:3852"
                             : configured;
-                        await socket.ConnectAsync(new Uri(url), cancellationToken);
+                        await socket.ConnectAsync(new Uri(url), cancellationToken)
+                            .ConfigureAwait(false);
                         if (reconnectDelayMs > 1000)
                         {
-                            Debug.Log("DCC-MCP Unity bridge reconnected.");
+                            QueueLog("DCC-MCP Unity bridge reconnected.");
                         }
                         else
                         {
-                            Debug.Log("DCC-MCP Unity bridge connected.");
+                            QueueLog("DCC-MCP Unity bridge connected.");
                         }
                         reconnectDelayMs = 1000;
                         await SendAsync(socket, new JObject
@@ -143,8 +163,8 @@ namespace DccMcp.Unity
                             ["project_path_hash"] = ProjectPathHash,
                             ["session_instance_id"] = SessionInstanceId,
                             ["process_id"] = ProcessId,
-                        }, cancellationToken);
-                        await ReceiveAsync(socket, cancellationToken);
+                        }, cancellationToken).ConfigureAwait(false);
+                        await ReceiveAsync(socket, cancellationToken).ConfigureAwait(false);
                     }
                     catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                     {
@@ -154,16 +174,17 @@ namespace DccMcp.Unity
                     {
                         if (reconnectDelayMs == 1000)
                         {
-                            Debug.LogWarning(
+                            QueueLog(
                                 "DCC-MCP Unity bridge disconnected; retrying in the background: "
-                                + exception.Message);
+                                + exception.Message,
+                                true);
                         }
                     }
                 }
 
                 try
                 {
-                    await Task.Delay(reconnectDelayMs, cancellationToken);
+                    await Task.Delay(reconnectDelayMs, cancellationToken).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -184,7 +205,8 @@ namespace DccMcp.Unity
                     do
                     {
                         received = await socket.ReceiveAsync(
-                            new ArraySegment<byte>(buffer), cancellationToken);
+                                new ArraySegment<byte>(buffer), cancellationToken)
+                            .ConfigureAwait(false);
                         if (received.MessageType == WebSocketMessageType.Close)
                         {
                             return;
@@ -192,9 +214,10 @@ namespace DccMcp.Unity
                         if (stream.Length + received.Count > MaxInboundMessageBytes)
                         {
                             await socket.CloseAsync(
-                                WebSocketCloseStatus.MessageTooBig,
-                                "DCC-MCP message exceeds 1 MiB.",
-                                cancellationToken);
+                                    WebSocketCloseStatus.MessageTooBig,
+                                    "DCC-MCP message exceeds 1 MiB.",
+                                    cancellationToken)
+                                .ConfigureAwait(false);
                             return;
                         }
                         stream.Write(buffer, 0, received.Count);
@@ -213,9 +236,10 @@ namespace DccMcp.Unity
                         {
                             Interlocked.Decrement(ref PendingCount);
                             await SendSafelyAsync(
-                                socket,
-                                ErrorResponse(message["id"], -32001, "Unity request queue is full."),
-                                cancellationToken);
+                                    socket,
+                                    ErrorResponse(message["id"], -32001, "Unity request queue is full."),
+                                    cancellationToken)
+                                .ConfigureAwait(false);
                         }
                         else
                         {
@@ -228,6 +252,21 @@ namespace DccMcp.Unity
 
         private static void OnEditorUpdate()
         {
+            var logged = 0;
+            while (logged < 16 && PendingLogs.TryDequeue(out var log))
+            {
+                logged++;
+                Interlocked.Decrement(ref PendingLogCount);
+                if (log.IsWarning)
+                {
+                    Debug.LogWarning(log.Message);
+                }
+                else
+                {
+                    Debug.Log(log.Message);
+                }
+            }
+
             var processed = 0;
             while (processed < 16 && Pending.TryDequeue(out var item))
             {
@@ -311,6 +350,20 @@ namespace DccMcp.Unity
             return instanceId;
         }
 
+        private static void QueueLog(string message, bool isWarning = false)
+        {
+            if (Lifetime.IsCancellationRequested)
+            {
+                return;
+            }
+            if (Interlocked.Increment(ref PendingLogCount) > MaxPendingLogs)
+            {
+                Interlocked.Decrement(ref PendingLogCount);
+                return;
+            }
+            PendingLogs.Enqueue(new LogItem(message, isWarning));
+        }
+
         private static async Task SendSafelyAsync(
             ClientWebSocket socket,
             JObject message,
@@ -318,12 +371,12 @@ namespace DccMcp.Unity
         {
             try
             {
-                await SendGate.WaitAsync(cancellationToken);
+                await SendGate.WaitAsync(cancellationToken).ConfigureAwait(false);
                 try
                 {
                     if (socket.State == WebSocketState.Open)
                     {
-                        await SendAsync(socket, message, cancellationToken);
+                        await SendAsync(socket, message, cancellationToken).ConfigureAwait(false);
                     }
                 }
                 finally
@@ -336,7 +389,7 @@ namespace DccMcp.Unity
             }
             catch (Exception exception)
             {
-                Debug.LogWarning("DCC-MCP Unity response failed: " + exception.Message);
+                QueueLog("DCC-MCP Unity response failed: " + exception.Message, true);
             }
         }
 
