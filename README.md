@@ -3,7 +3,7 @@
 ![DCC-MCP Unity lockup](https://raw.githubusercontent.com/dcc-mcp/dcc-mcp-unity/main/docs/assets/dcc-mcp-unity.svg)
 
 Unity Editor adapter for the DCC Model Context Protocol ecosystem. It ships a UPM Editor package,
-a loopback WebSocket bridge, and typed project and scene tools.
+a loopback WebSocket bridge, and typed project, scene, build, and diagnostic tools.
 
 The supported Editor range starts at Unity 2018.4.25f1 with the .NET 4.x Equivalent scripting
 runtime. CI pins that Unity 2018 baseline, the 2021.3 baseline, and the current stable Unity 6
@@ -38,6 +38,21 @@ lower it; queued Editor work expires first so timed-out mutations are not execut
 The default bridge targets one Unity Editor. For concurrent Editors, run one adapter per Editor and
 assign each pair a unique bridge port and URL before starting either process.
 
+Source writes are disabled by default. An operator may set
+`DCC_MCP_UNITY_ALLOW_SOURCE_WRITES=1` before starting Unity to enable the bounded
+`upsert_text_asset` tool. It accepts only allowlisted UTF-8 text extensions below `Assets`, caps
+encoded content at 256 KiB, rejects JSON-unsafe control characters, requires compare-and-swap state,
+rejects reparse points, and replaces files atomically. The adapter exposes no delete, arbitrary path,
+shell, or code-evaluation tool.
+
+The per-asset lock is cooperative: it serializes DCC-MCP writers but cannot stop another same-user
+process from ignoring the lock or swapping a junction or symlink after path validation and before the
+operating system resolves a write. That same-user race is outside this in-process boundary. If an
+external replacement conflict is detected, the adapter performs no automatic rollback, preserves the
+displaced bytes in a unique `.dccmcp-*.backup` conflict backup, and does not write the target again
+after detection. A failed conflict job does not prove the target stayed unchanged; inspect both the
+target and backup before submitting another write.
+
 ## Standalone sidecar
 
 Hosts without an embedded Python runtime can use the PyOxidizer sidecar released with each version.
@@ -54,20 +69,37 @@ For local development, run `dcc-mcp-unity-standalone --bridge-port 3852 --watch-
 1. Load `unity-project` and call `inspect_project` before assuming project or editor state. Stop if
    the returned project is not the intended target or the Editor is compiling, updating, entering
    Play Mode, or playing.
-2. Load `unity-scene` and call `inspect_scene` immediately before using an instance ID. Treat IDs
+2. Read an existing source with `read_text_asset`, then pass its SHA-256 to `upsert_text_asset`;
+   use `expected_sha256: absent` only for creation. Keep the UUID `request_id` and poll
+   `inspect_job` until it reports `succeeded` or `failed`.
+3. Call `refresh_and_compile`, poll its job, and inspect `read_console` before entering Play Mode.
+4. Load `unity-scene` and call `inspect_scene` immediately before using an instance ID. Treat IDs
    as opaque values and return them unchanged. Unity 6000.5+ emits decimal strings; older Editors
    retain integer output, and both forms are accepted as input.
-3. Create GameObjects or change transforms through typed operations backed by Unity Undo.
-4. Verify the hierarchy, then explicitly call `save_scene`.
-5. Load `unity-diagnostics` and call `read_console` after failures or as a final verification step.
+5. Create GameObjects or change transforms through typed operations backed by Unity Undo, verify
+   the hierarchy, then explicitly call `save_scene`.
+6. Use `set_play_mode` before `capture_game_view`; capture requires active, unpaused Play Mode,
+   focuses Game View, waits a rendered frame, and succeeds only after Unity decodes a nonzero PNG
+   below `Builds/DccMcp/Captures`. Captures are limited to 32 MiB, 8192 pixels per axis, and
+   32M pixels total.
+7. `build_windows_player` persists an active-target switch when needed, rejects dirty enabled scenes,
+   and builds exactly the saved Build Settings scenes to a new UUID directory below `Builds/DccMcp`.
+   Poll the job and launch the reported executable as a separate acceptance gate.
 
-Do not automatically retry a timed-out scene mutation. Inspect the project and scene first because
-the Editor may have completed the original request near the timeout boundary.
+Do not replace a timed-out job with a new UUID. Reconnect and inspect the original `request_id`;
+Unity persists queued/running/succeeded/failed state across domain reloads and rejects reuse with
+different parameters.
+
+Unity 2018 reloads Editor assemblies during normal Play Mode transitions, so the loopback socket
+will disconnect and reconnect. `set_play_mode` persists its waiting state before requesting the
+transition; a bridge disconnect is not completion or failure. After reconnection, inspect the same
+`request_id` for the observed terminal state.
 
 No raw C# evaluation, shell command, or arbitrary filesystem write is exposed. The Editor bridge
 accepts only the methods implemented in `DccMcpCommands` and executes them on Unity's editor update
-loop. Mutations fail closed during compilation, asset updates, and Play Mode. Requests, queued work,
-scene snapshots, Console reads, and serialized responses have explicit size or lifetime budgets.
+loop. One persistent mutating job runs at a time. Mutations fail closed in incompatible Editor
+states. Requests, queued work, source text, scene snapshots, Console reads, and serialized responses
+have explicit size or lifetime budgets.
 
 ## Validation boundary
 

@@ -62,6 +62,7 @@ def test_bundled_skills_release_and_upm_package_exist():
     assert test_assembly["includePlatforms"] == ["Editor"]
     assert test_assembly["optionalUnityReferences"] == ["TestAssemblies"]
     assert (PACKAGE / "Tests" / "Editor" / "DccMcpCommandsTests.cs").is_file()
+    assert (PACKAGE / "Editor" / "DccMcpJobs.cs").is_file()
 
     legacy_project = ROOT / "tests" / "unity-2018-project"
     legacy_manifest = json.loads(

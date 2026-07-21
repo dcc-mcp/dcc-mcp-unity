@@ -16,8 +16,10 @@ namespace DccMcp.Unity
     [InitializeOnLoad]
     internal static class DccMcpBridge
     {
-        private const int MaxInboundMessageBytes = 1024 * 1024;
-        private const int MaxOutboundMessageBytes = 900 * 1024;
+        internal const int MaxInboundMessageBytes = 1024 * 1024;
+        internal const int MaxOutboundMessageBytes = 900 * 1024;
+        internal const int MaxEscapedTextEnvelopeBytes =
+            DccMcpJobs.MaxTextAssetBytes * 3 + 64 * 1024;
         private const int MaxPendingRequests = 256;
         private static readonly TimeSpan RequestQueueLifetime = TimeSpan.FromSeconds(55);
         private static readonly DateTime UnixEpochUtc =
@@ -79,6 +81,13 @@ namespace DccMcp.Unity
 
         static DccMcpBridge()
         {
+            if (MaxEscapedTextEnvelopeBytes > Math.Min(
+                MaxInboundMessageBytes,
+                MaxOutboundMessageBytes))
+            {
+                throw new InvalidOperationException(
+                    "Unity text asset and bridge message limits are inconsistent.");
+            }
             EditorApplication.update += OnEditorUpdate;
             EditorApplication.quitting += Stop;
             AssemblyReloadEvents.beforeAssemblyReload += Stop;
