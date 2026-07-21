@@ -1,6 +1,6 @@
 {
   "name": "com.dcc-mcp.unity",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "displayName": "DCC-MCP Unity",
   "description": "Typed Unity Editor bridge for the DCC Model Context Protocol ecosystem.",
   "unity": "2018.4",
