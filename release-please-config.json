@@ -1,0 +1,42 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "python",
+      "package-name": "dcc-mcp-unity",
+      "changelog-path": "CHANGELOG.md",
+      "include-component-in-tag": false,
+      "extra-files": [
+        {
+          "type": "toml",
+          "path": "pyproject.toml",
+          "jsonpath": "$.project.version"
+        },
+        {
+          "type": "generic",
+          "path": "src/dcc_mcp_unity/__version__.py"
+        },
+        {
+          "type": "json",
+          "path": "src/dcc_mcp_unity/unity_package/package.json",
+          "jsonpath": "$.version"
+        },
+        {
+          "type": "generic",
+          "path": "src/dcc_mcp_unity/skills/unity-project/SKILL.md"
+        },
+        {
+          "type": "generic",
+          "path": "src/dcc_mcp_unity/skills/unity-scene/SKILL.md"
+        },
+        {
+          "type": "generic",
+          "path": "src/dcc_mcp_unity/skills/unity-diagnostics/SKILL.md"
+        },
+        {
+          "type": "generic",
+          "path": "uv.lock"
+        }
+      ]
+    }
+  }
+}

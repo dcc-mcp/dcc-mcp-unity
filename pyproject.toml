@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling>=1.26"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dcc-mcp-unity"
+version = "0.1.0"
+description = "Unity Editor adapter and typed game-authoring skills for DCC-MCP"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "loonghao", email = "hal.long@outlook.com" }]
+keywords = ["unity", "mcp", "game-development", "ai", "model-context-protocol"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Games/Entertainment",
+]
+dependencies = ["dcc-mcp-core>=0.19.45,<1.0.0", "websockets>=12"]
+
+[project.urls]
+Homepage = "https://github.com/dcc-mcp/dcc-mcp-unity"
+Repository = "https://github.com/dcc-mcp/dcc-mcp-unity"
+Issues = "https://github.com/dcc-mcp/dcc-mcp-unity/issues"
+
+[project.optional-dependencies]
+dev = ["build>=1.2", "pytest>=8", "ruff>=0.8", "twine>=6"]
+
+[project.scripts]
+dcc-mcp-unity = "dcc_mcp_unity.server:main"
+dcc-mcp-unity-install = "dcc_mcp_unity.install:main"
+
+[project.entry-points."dcc_mcp.adapters"]
+unity = "dcc_mcp_unity:UnityMcpServer"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dcc_mcp_unity"]
+artifacts = ["src/dcc_mcp_unity/skills/**", "src/dcc_mcp_unity/unity_package/**"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/dcc_mcp_unity",
+  "tests",
+  "tools",
+  "docs",
+  "README.md",
+  "install.md",
+  "CHANGELOG.md",
+  "LICENSE",
+  "release-please-config.json",
+  ".release-please-manifest.json",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src", "."]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
