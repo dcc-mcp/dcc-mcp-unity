@@ -46,7 +46,7 @@ flowchart LR
 6. **Diagnostic loop.** Project inspection reports Editor readiness, and `editor.read_console`
    provides a bounded read-only view of messages captured after package load.
 7. **Version preflight.** The installer reads `ProjectSettings/ProjectVersion.txt` and rejects Unity
-   versions older than 2018.4.36f1 before changing the project.
+   versions older than 2018.4.25f1 before changing the project.
 8. **No blind mutation retry.** A timeout is ambiguous: Unity may have completed work near the
    boundary. The workflow requires project and scene inspection before deciding what to do next.
 

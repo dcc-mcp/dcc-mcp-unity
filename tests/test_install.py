@@ -24,7 +24,7 @@ def test_install_copies_bundled_upm_package(tmp_path: Path):
 
 
 def test_install_supports_unity_2018_4_lts(tmp_path: Path):
-    make_unity_project(tmp_path, "2018.4.36f1")
+    make_unity_project(tmp_path, "2018.4.25f1")
     assert install_package(tmp_path).is_dir()
 
 
@@ -42,15 +42,15 @@ def test_install_requires_explicit_overwrite(tmp_path: Path):
 
 
 def test_install_rejects_unsupported_unity_version(tmp_path: Path):
-    make_unity_project(tmp_path, "2018.4.35f1")
-    with pytest.raises(ValueError, match="requires Unity 2018.4.36f1 or newer"):
+    make_unity_project(tmp_path, "2018.4.24f1")
+    with pytest.raises(ValueError, match="requires Unity 2018.4.25f1 or newer"):
         install_package(tmp_path)
 
 
-@pytest.mark.parametrize("version", ["2018.4.36b1", "2018.4.36f0"])
+@pytest.mark.parametrize("version", ["2018.4.25b1", "2018.4.25f0"])
 def test_install_rejects_prerelease_before_minimum_editor(tmp_path: Path, version: str):
     make_unity_project(tmp_path, version)
-    with pytest.raises(ValueError, match="requires Unity 2018.4.36f1 or newer"):
+    with pytest.raises(ValueError, match="requires Unity 2018.4.25f1 or newer"):
         install_package(tmp_path)
 
 

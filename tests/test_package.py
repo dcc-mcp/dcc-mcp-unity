@@ -39,7 +39,7 @@ def test_bundled_skills_release_and_upm_package_exist():
     package = json.loads((PACKAGE / "package.json").read_text(encoding="utf-8"))
     assert package["name"] == "com.dcc-mcp.unity"
     assert package["unity"] == "2018.4"
-    assert package["unityRelease"] == "36f1"
+    assert package["unityRelease"] == "25f1"
     assert package["dependencies"]["com.unity.nuget.newtonsoft-json"] == "3.2.2"
     assert (PACKAGE / "LICENSE.md").is_file()
 
@@ -71,7 +71,7 @@ def test_bundled_skills_release_and_upm_package_exist():
         "file:../../../src/dcc_mcp_unity/unity_package"
     )
     assert legacy_manifest["testables"] == ["com.dcc-mcp.unity"]
-    assert "2018.4.36f1" in (legacy_project / "ProjectSettings" / "ProjectVersion.txt").read_text(
+    assert "2018.4.25f1" in (legacy_project / "ProjectSettings" / "ProjectVersion.txt").read_text(
         encoding="utf-8"
     )
 
