@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.2](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.6.1...v0.6.2) (2026-07-22)
+
+
+### Bug Fixes
+
+* report Unity bridge connection readiness ([2af8d3a](https://github.com/dcc-mcp/dcc-mcp-unity/commit/2af8d3a5c687ae0b900331729051a783077c0404))
+
 ## [0.6.1](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.6.0...v0.6.1) (2026-07-22)
 
 
