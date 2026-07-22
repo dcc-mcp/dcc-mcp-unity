@@ -532,6 +532,28 @@ namespace DccMcp.Unity.Tests
             Assert.That(observedPersistedWaitingState, Is.True);
         }
 
+        [TestCase(false, false, false, true)]
+        [TestCase(false, false, true, false)]
+        [TestCase(false, true, false, false)]
+        [TestCase(false, true, true, false)]
+        [TestCase(true, false, false, false)]
+        [TestCase(true, false, true, false)]
+        [TestCase(true, true, false, false)]
+        [TestCase(true, true, true, true)]
+        public void PlayModeCompletionRequiresBothEditorStatesToMatchTarget(
+            bool play,
+            bool isPlaying,
+            bool isPlayingOrWillChangePlaymode,
+            bool expected)
+        {
+            Assert.That(
+                DccMcpJobs.IsPlayModeTransitionComplete(
+                    play,
+                    isPlaying,
+                    isPlayingOrWillChangePlaymode),
+                Is.EqualTo(expected));
+        }
+
         [Test]
         public void CasConflictPreservesBackupWithoutOverwritingALaterExternalWrite()
         {

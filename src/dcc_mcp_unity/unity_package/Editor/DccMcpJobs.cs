@@ -478,6 +478,13 @@ namespace DccMcp.Unity
         private static void AdvancePlayMode(JObject store, JObject job)
         {
             var play = (bool)((JObject)job["parameters"])["play"];
+            var isPlaying = EditorApplication.isPlaying;
+            var isPlayingOrWillChangePlaymode =
+                EditorApplication.isPlayingOrWillChangePlaymode;
+            if (TimedOut(job, TimeSpan.FromMinutes(2)))
+            {
+                throw new InvalidOperationException("Unity Play Mode did not reach the requested state.");
+            }
             if ((string)job["phase"] == "starting")
             {
                 if (EditorApplication.isCompiling || EditorApplication.isUpdating)
@@ -485,23 +492,34 @@ namespace DccMcp.Unity
                     throw new InvalidOperationException(
                         "Play Mode cannot change while Unity is compiling or updating assets.");
                 }
+                if (isPlaying != isPlayingOrWillChangePlaymode)
+                {
+                    Touch(job);
+                    return;
+                }
                 PersistPlayModeTransition(
                     store,
                     job,
                     () => EditorApplication.isPlaying = play);
                 return;
             }
-
-            if (TimedOut(job, TimeSpan.FromMinutes(2)))
-            {
-                throw new InvalidOperationException("Unity Play Mode did not reach the requested state.");
-            }
-            if (EditorApplication.isPlaying != play)
+            if (!IsPlayModeTransitionComplete(
+                play,
+                isPlaying,
+                isPlayingOrWillChangePlaymode))
             {
                 Touch(job);
                 return;
             }
             Succeed(job, new JObject { ["is_playing"] = play });
+        }
+
+        internal static bool IsPlayModeTransitionComplete(
+            bool play,
+            bool isPlaying,
+            bool isPlayingOrWillChangePlaymode)
+        {
+            return isPlaying == play && isPlayingOrWillChangePlaymode == play;
         }
 
         internal static void PersistPlayModeTransition(
