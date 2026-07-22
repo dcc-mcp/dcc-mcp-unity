@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.6.0...v0.6.1) (2026-07-22)
+
+
+### Bug Fixes
+
+* wait for Unity Play Mode transitions to settle ([#17](https://github.com/dcc-mcp/dcc-mcp-unity/issues/17)) ([fb0d7f0](https://github.com/dcc-mcp/dcc-mcp-unity/commit/fb0d7f096fbcb3cec912e88903bc899f0644e77e))
+
 ## [0.6.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.5.1...v0.6.0) (2026-07-22)
 
 
