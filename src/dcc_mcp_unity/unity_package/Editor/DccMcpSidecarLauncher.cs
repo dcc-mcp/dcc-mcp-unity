@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using UnityEditor;
 using UnityEngine;
 
 namespace DccMcp.Unity
@@ -11,6 +12,10 @@ namespace DccMcp.Unity
     {
         internal static void StartIfConfigured()
         {
+            if (DccMcpBridge.IsImportWorkerOrBatchMode())
+            {
+                return;
+            }
             var path = Environment.GetEnvironmentVariable("DCC_MCP_UNITY_SIDECAR_PATH");
             if (string.IsNullOrEmpty(path))
             {

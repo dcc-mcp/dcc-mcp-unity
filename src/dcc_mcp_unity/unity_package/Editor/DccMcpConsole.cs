@@ -38,6 +38,10 @@ namespace DccMcp.Unity
 
         static DccMcpConsole()
         {
+            if (DccMcpBridge.IsImportWorkerOrBatchMode())
+            {
+                return;
+            }
             Application.logMessageReceivedThreaded += Capture;
             AssemblyReloadEvents.beforeAssemblyReload += Stop;
         }

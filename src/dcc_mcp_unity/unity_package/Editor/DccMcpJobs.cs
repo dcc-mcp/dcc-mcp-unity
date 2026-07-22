@@ -43,6 +43,10 @@ namespace DccMcp.Unity
 
         static DccMcpJobs()
         {
+            if (DccMcpBridge.IsImportWorkerOrBatchMode())
+            {
+                return;
+            }
             EditorApplication.update += Tick;
             AssemblyReloadEvents.beforeAssemblyReload += Stop;
             RestoreTestCallbackAfterReload();

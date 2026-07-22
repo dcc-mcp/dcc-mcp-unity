@@ -96,6 +96,10 @@ namespace DccMcp.Unity
 
         static DccMcpBridge()
         {
+            if (IsImportWorkerOrBatchMode())
+            {
+                return;
+            }
             if (MaxEscapedTextEnvelopeBytes > Math.Min(
                 MaxInboundMessageBytes,
                 MaxOutboundMessageBytes))
@@ -108,6 +112,15 @@ namespace DccMcp.Unity
             AssemblyReloadEvents.beforeAssemblyReload += Stop;
             DccMcpSidecarLauncher.StartIfConfigured();
             _ = RunAsync(Lifetime.Token);
+        }
+
+        internal static bool IsImportWorkerOrBatchMode()
+        {
+#if UNITY_2020_2_OR_NEWER
+            return AssetDatabase.IsAssetImportWorkerProcess();
+#else
+            return Application.isBatchMode;
+#endif
         }
 
         private static void Stop()
