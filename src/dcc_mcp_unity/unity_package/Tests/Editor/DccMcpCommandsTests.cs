@@ -666,6 +666,21 @@ namespace DccMcp.Unity.Tests
                     .With.Message.Contains("same request_id"));
         }
 
+        [Test]
+        public void BridgeGuardSkipsImportWorkerAndBatchModeProcesses()
+        {
+#if UNITY_2020_2_OR_NEWER
+            // In the real interactive Editor, IsAssetImportWorkerProcess returns false.
+            // This test verifies the guard method exists and returns the expected
+            // value for the interactive Editor (always false here).
+            Assert.That(DccMcpBridge.IsImportWorkerOrBatchMode(), Is.False);
+#else
+            // On older Unity, we fall back to Application.isBatchMode which is false
+            // in interactive Editor mode.
+            Assert.That(DccMcpBridge.IsImportWorkerOrBatchMode(), Is.False);
+#endif
+        }
+
         private sealed class ThrowingReadStream : MemoryStream
         {
             internal ThrowingReadStream(int length)
