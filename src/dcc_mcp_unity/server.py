@@ -10,13 +10,15 @@ from typing import Any, Optional
 
 from dcc_mcp_core import DccServerOptions, HostExecutionBridge
 from dcc_mcp_core.host import QueueDispatcher, StandaloneHost
+from dcc_mcp_core.readiness import AdapterReadinessBinder
 from dcc_mcp_core.server_base import DccServerBase
 
 from .__version__ import __version__
-from .bridge import start_bridge, stop_bridge
+from .bridge import get_bridge, start_bridge, stop_bridge
 from .dispatcher import UnityBridgeDispatcher
 
 _server: Optional["UnityMcpServer"] = None
+_READINESS_POLL_SECONDS = 0.25
 
 
 class UnityMcpServer(DccServerBase):
@@ -44,18 +46,28 @@ class UnityMcpServer(DccServerBase):
             execution_bridge=execution_bridge,
         )
         super().__init__(options=options)
+        self._readiness = AdapterReadinessBinder(self)
+        self._readiness_stop = threading.Event()
+        self._readiness_thread: Optional[threading.Thread] = None
+        self._set_bridge_readiness(False)
 
     def start(self, **kwargs: Any) -> Any:
         start_bridge()
         try:
             self._host_driver.start()
-            return super().start(**kwargs)
+            handle = super().start(**kwargs)
+            self._start_readiness_monitor()
+            return handle
         except Exception:
-            self._host_driver.stop()
-            stop_bridge()
+            try:
+                super().stop()
+            finally:
+                self._host_driver.stop()
+                stop_bridge()
             raise
 
     def stop(self) -> None:
+        self._stop_readiness_monitor()
         try:
             super().stop()
         finally:
@@ -63,6 +75,42 @@ class UnityMcpServer(DccServerBase):
                 self._host_driver.stop()
             finally:
                 stop_bridge()
+
+    def _set_bridge_readiness(self, ready: bool) -> None:
+        self._readiness.mark_dispatcher_ready(
+            ready,
+            host_execution_bridge_ready=ready,
+            main_thread_executor_ready=ready,
+            dcc_ready=ready,
+        )
+
+    def _sync_bridge_readiness(self) -> bool:
+        ready = get_bridge().is_connected()
+        self._set_bridge_readiness(ready)
+        return ready
+
+    def _start_readiness_monitor(self) -> None:
+        if self._readiness_thread is not None and self._readiness_thread.is_alive():
+            return
+        self._readiness_stop.clear()
+        self._sync_bridge_readiness()
+        self._readiness_thread = threading.Thread(
+            target=self._monitor_bridge_readiness,
+            name="dcc-mcp-unity-readiness",
+            daemon=True,
+        )
+        self._readiness_thread.start()
+
+    def _monitor_bridge_readiness(self) -> None:
+        while not self._readiness_stop.wait(_READINESS_POLL_SECONDS):
+            self._sync_bridge_readiness()
+
+    def _stop_readiness_monitor(self) -> None:
+        self._readiness_stop.set()
+        thread, self._readiness_thread = self._readiness_thread, None
+        if thread is not None and thread is not threading.current_thread():
+            thread.join(timeout=1.0)
+        self._set_bridge_readiness(False)
 
     def _version_string(self) -> str:
         return os.environ.get("DCC_MCP_UNITY_VERSION", "unknown")
