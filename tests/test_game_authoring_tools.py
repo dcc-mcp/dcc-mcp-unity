@@ -57,6 +57,16 @@ def _load_script(skill: str, name: str):
             {"request_id": "778e72dd-e536-4ff8-aad0-9b752ab61c3b"},
         ),
         (
+            "unity-project",
+            "run_tests",
+            "project.run_tests",
+            {
+                "request_id": "778e72dd-e536-4ff8-aad0-9b752ab61c3b",
+                "test_mode": "edit_mode",
+                "test_names": ["Example.Tests.GameRulesTests"],
+            },
+        ),
+        (
             "unity-diagnostics",
             "inspect_job",
             "jobs.inspect",
@@ -99,6 +109,7 @@ def test_game_authoring_manifests_declare_the_bounded_surface():
         "refresh_and_compile",
         "set_play_mode",
         "build_windows_player",
+        "run_tests",
     ):
         assert f"- name: {name}" in project
     for name in ("inspect_job", "capture_game_view"):
@@ -140,12 +151,13 @@ def test_job_tool_schemas_publish_states_and_accept_the_standard_error_envelope(
                 "refresh_and_compile",
                 "set_play_mode",
                 "build_windows_player",
+                "run_tests",
                 "inspect_job",
                 "capture_game_view",
             }
         )
 
-    assert len(job_tools) == 6
+    assert len(job_tools) == 7
     standard_error = skill_error("failed", "transport error")
     successful_job = {
         "success": True,
@@ -259,6 +271,7 @@ def test_editor_job_protocol_is_persistent_fail_closed_and_bounded():
         "editor.set_play_mode",
         "jobs.inspect",
         "project.build_windows_player",
+        "project.run_tests",
         "editor.capture_game_view",
     ):
         assert method in commands
@@ -294,6 +307,29 @@ def test_editor_job_protocol_is_persistent_fail_closed_and_bounded():
     assert "Game View capture requires Play Mode" in jobs
     assert "CompileAssemblyFromSource" not in jobs
     assert "Process.Start" not in jobs
+
+
+def test_typed_test_runner_uses_bounded_exact_filters_and_native_nunit_evidence():
+    editor = ROOT / "src" / "dcc_mcp_unity" / "unity_package" / "Editor"
+    runner = "\n".join(
+        (editor / name).read_text(encoding="utf-8")
+        for name in ("DccMcpTestRunner.cs", "DccMcpTestFrameworkBridge.cs")
+    )
+    jobs = (editor / "DccMcpJobs.cs").read_text(encoding="utf-8")
+
+    assert "UnityEditor.TestTools.TestRunner.Api.TestRunnerApi" in runner
+    assert "UnityEditor.TestTools.TestRunner.CommandLineTest.ResultsSavingCallbacks" in runner
+    assert '"Builds"' in runner and '"DccMcp"' in runner and '"Tests"' in runner
+    assert "MaxTestNames = 128" in runner
+    assert "test_names" in runner
+    assert "edit_mode" in runner
+    assert "play_mode" in runner
+    assert "Process.Start" not in runner
+    assert "Unity.exe" not in runner
+    assert "command_line" not in runner.lower()
+    assert "HideAndDontSave" not in runner
+    assert "EnsureCallback" in runner
+    assert "RestoreTestCallbackAfterReload" in jobs
 
 
 def test_source_write_security_contract_bounds_external_writer_and_reparse_races():

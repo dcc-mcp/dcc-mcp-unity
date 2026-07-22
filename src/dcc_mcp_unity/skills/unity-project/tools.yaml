@@ -251,3 +251,62 @@ tools:
     next-tools:
       on-success: [unity_diagnostics__inspect_job]
       on-failure: [unity_diagnostics__read_console, dcc_diagnostics__audit_log]
+  - name: run_tests
+    description: Queue the installed Unity Test Framework in EditMode or PlayMode and write request-scoped NUnit XML below Builds/DccMcp/Tests. Optional test_names are exact fully-qualified test or fixture names; at most 128 are accepted. Poll inspect_job and verify result.outcome and counts; zero matched tests fail closed. This does not launch a second Unity process or accept command-line arguments.
+    input_schema:
+      type: object
+      required: [request_id, test_mode]
+      properties:
+        request_id:
+          type: string
+          pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        test_mode:
+          type: string
+          enum: [edit_mode, play_mode]
+        test_names:
+          type: array
+          maxItems: 128
+          uniqueItems: true
+          items:
+            type: string
+            minLength: 1
+            maxLength: 512
+            pattern: '^[^\x00-\x1f\x7f]+$'
+          default: []
+      additionalProperties: false
+    output_schema:
+      type: object
+      required: [success, message, prompt, error, context]
+      properties:
+        success: {type: boolean}
+        message: {type: string}
+        prompt: {type: [string, "null"]}
+        error: {type: [string, "null"]}
+        context:
+          type: object
+          properties:
+            state: {type: string, enum: [queued, running, succeeded, failed]}
+            phase: {type: string}
+      allOf:
+        - if:
+            properties:
+              success: {const: true}
+            required: [success]
+          then:
+            properties:
+              context:
+                required: [state, phase]
+    execution: sync
+    affinity: main
+    enforce_thread_affinity: true
+    timeout_hint_secs: 60
+    annotations:
+      read_only_hint: false
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
+    source_file: scripts/run_tests.py
+    next-tools:
+      on-success: [unity_diagnostics__inspect_job]
+      on-failure: [unity_diagnostics__read_console, dcc_diagnostics__audit_log]

@@ -43,6 +43,7 @@ namespace DccMcp.Unity
                     case "project.refresh_and_compile":
                     case "editor.set_play_mode":
                     case "project.build_windows_player":
+                    case "project.run_tests":
                     case "editor.capture_game_view":
                         result = DccMcpJobs.Submit(method, parameters);
                         break;

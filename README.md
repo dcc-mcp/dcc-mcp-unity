@@ -82,7 +82,11 @@ For local development, run `dcc-mcp-unity-standalone --bridge-port 3852 --watch-
    focuses Game View, waits a rendered frame, and succeeds only after Unity decodes a nonzero PNG
    below `Builds/DccMcp/Captures`. Captures are limited to 32 MiB, 8192 pixels per axis, and
    32M pixels total.
-7. `build_windows_player` persists an active-target switch when needed, rejects dirty enabled scenes,
+7. `run_tests` executes the installed Unity Test Framework in EditMode or PlayMode without spawning
+   another Editor. Optional filters are exact fully-qualified test or fixture names. Poll the job and
+   retain its request-scoped NUnit XML, SHA-256, outcome, and counts as test evidence; zero matches
+   fail closed.
+8. `build_windows_player` persists an active-target switch when needed, rejects dirty enabled scenes,
    and builds exactly the saved Build Settings scenes to a new UUID directory below `Builds/DccMcp`.
    Poll the job and launch the reported executable as a separate acceptance gate.
 
