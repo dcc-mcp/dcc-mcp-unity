@@ -1,0 +1,9 @@
+{
+  "name": "DccMcp.TypedRunner.Probe.Tests",
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ]
+}

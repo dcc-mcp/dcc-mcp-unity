@@ -13,6 +13,7 @@ namespace DccMcp.Unity.Tests
     public sealed class DccMcpCommandsTests
     {
         private const string SourceWriteGate = "DCC_MCP_UNITY_ALLOW_SOURCE_WRITES";
+        private string originalJobStore;
         private string originalSourceWriteGate;
         private EditorBuildSettingsScene[] originalBuildScenes;
 
@@ -21,6 +22,7 @@ namespace DccMcp.Unity.Tests
         {
             originalSourceWriteGate = Environment.GetEnvironmentVariable(SourceWriteGate);
             originalBuildScenes = EditorBuildSettings.scenes;
+            originalJobStore = SessionState.GetString(DccMcpJobs.SessionStateKey, string.Empty);
             SessionState.EraseString(DccMcpJobs.SessionStateKey);
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         }
@@ -30,7 +32,14 @@ namespace DccMcp.Unity.Tests
         {
             Environment.SetEnvironmentVariable(SourceWriteGate, originalSourceWriteGate);
             EditorBuildSettings.scenes = originalBuildScenes;
-            SessionState.EraseString(DccMcpJobs.SessionStateKey);
+            if (string.IsNullOrEmpty(originalJobStore))
+            {
+                SessionState.EraseString(DccMcpJobs.SessionStateKey);
+            }
+            else
+            {
+                SessionState.SetString(DccMcpJobs.SessionStateKey, originalJobStore);
+            }
             EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
             if (AssetDatabase.IsValidFolder("Assets/DccMcpJobTests"))
             {
@@ -214,6 +223,122 @@ namespace DccMcp.Unity.Tests
             Assert.That(job["created_at_utc"].Type, Is.EqualTo(JTokenType.String));
             Assert.That((string)job["created_at_utc"], Is.EqualTo(timestamp));
             Assert.That(job["updated_at_utc"].Type, Is.EqualTo(JTokenType.String));
+        }
+
+        [Test]
+        public void TestRunnerParametersAreBoundedAndCanonical()
+        {
+            var normalized = DccMcpTestRunner.NormalizeParameters(new JObject
+            {
+                ["request_id"] = "778e72dd-e536-4ff8-aad0-9b752ab61c3b",
+                ["test_mode"] = "edit_mode",
+                ["test_names"] = new JArray("Z.Tests.Last", "A.Tests.First", "A.Tests.First"),
+            });
+
+            Assert.That((string)normalized["test_mode"], Is.EqualTo("edit_mode"));
+            Assert.That(
+                ((JArray)normalized["test_names"]).Values<string>(),
+                Is.EqualTo(new[] { "A.Tests.First", "Z.Tests.Last" }));
+
+            Assert.That(
+                () => DccMcpTestRunner.NormalizeParameters(new JObject
+                {
+                    ["request_id"] = Guid.NewGuid().ToString("D"),
+                    ["test_mode"] = "batch_mode",
+                }),
+                Throws.TypeOf<InvalidOperationException>()
+                    .With.Message.Contains("edit_mode or play_mode"));
+
+            var tooMany = new JArray();
+            for (var index = 0; index < 129; index++)
+            {
+                tooMany.Add("Tests.Case" + index);
+            }
+            Assert.That(
+                () => DccMcpTestRunner.NormalizeParameters(new JObject
+                {
+                    ["request_id"] = Guid.NewGuid().ToString("D"),
+                    ["test_mode"] = "edit_mode",
+                    ["test_names"] = tooMany,
+                }),
+                Throws.TypeOf<InvalidOperationException>()
+                    .With.Message.Contains("at most 128"));
+        }
+
+        [Test]
+        public void UnityTestFrameworkReflectionContractIsAvailable()
+        {
+            Assert.That(
+                () => DccMcpTestFrameworkBridge.ValidateContract(),
+                Throws.Nothing);
+        }
+
+        [Test]
+        public void TestRunnerCallbackCanBeRehydratedAndReleasedByRequestId()
+        {
+            var requestId = Guid.NewGuid().ToString("D");
+            var reportPath = Path.Combine(
+                Path.GetDirectoryName(Application.dataPath) ?? string.Empty,
+                "Library",
+                "DccMcpCallbackProbe-" + requestId + ".xml");
+
+            try
+            {
+                DccMcpTestFrameworkBridge.EnsureCallback(requestId, reportPath);
+                DccMcpTestFrameworkBridge.EnsureCallback(requestId, reportPath);
+                Assert.That(
+                    DccMcpTestFrameworkBridge.IsCallbackRegistered(requestId),
+                    Is.True);
+            }
+            finally
+            {
+                DccMcpTestFrameworkBridge.ReleaseCallback(requestId);
+            }
+
+            Assert.That(
+                DccMcpTestFrameworkBridge.IsCallbackRegistered(requestId),
+                Is.False);
+        }
+
+        [Test]
+        public void TestRunnerReportSummaryRequiresRunnableTestsAndPreservesCounts()
+        {
+            var projectPath = Path.GetDirectoryName(Application.dataPath) ?? string.Empty;
+            var directory = Path.Combine(
+                projectPath,
+                "Library",
+                "DccMcpUnityTestReport-" + Guid.NewGuid().ToString("N"));
+            var reportPath = Path.Combine(directory, "results.xml");
+            try
+            {
+                Directory.CreateDirectory(directory);
+                File.WriteAllText(
+                    reportPath,
+                    "<test-run result=\"Failed\" total=\"3\" passed=\"2\" failed=\"1\""
+                    + " inconclusive=\"0\" skipped=\"0\" duration=\"1.25\" />");
+
+                var result = DccMcpTestRunner.SummarizeReport(reportPath);
+                Assert.That((int)result["total"], Is.EqualTo(3));
+                Assert.That((int)result["passed"], Is.EqualTo(2));
+                Assert.That((int)result["failed"], Is.EqualTo(1));
+                Assert.That((string)result["outcome"], Is.EqualTo("failed"));
+
+                File.WriteAllText(
+                    reportPath,
+                    "<test-run result=\"Passed\" total=\"0\" passed=\"0\" failed=\"0\""
+                    + " inconclusive=\"0\" skipped=\"0\" duration=\"0\" />");
+                Assert.That(
+                    () => DccMcpTestRunner.SummarizeReport(reportPath),
+                    Throws.TypeOf<InvalidOperationException>()
+                        .With.Message.Contains("did not match any tests"));
+            }
+            finally
+            {
+                if (Directory.Exists(directory))
+                {
+                    Directory.Delete(directory, true);
+                }
+            }
         }
 
         [Test]

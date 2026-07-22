@@ -45,6 +45,7 @@ namespace DccMcp.Unity
         {
             EditorApplication.update += Tick;
             AssemblyReloadEvents.beforeAssemblyReload += Stop;
+            RestoreTestCallbackAfterReload();
         }
 
         internal static JObject ReadTextAsset(JObject parameters)
@@ -215,6 +216,9 @@ namespace DccMcp.Unity
                     break;
                 case "project.build_windows_player":
                     AdvanceWindowsBuild(store, job);
+                    break;
+                case "project.run_tests":
+                    AdvanceTestRun(store, job);
                     break;
                 case "editor.capture_game_view":
                     AdvanceCapture(store, job);
@@ -709,6 +713,59 @@ namespace DccMcp.Unity
             return scenes.ToArray();
         }
 
+        private static void AdvanceTestRun(JObject store, JObject job)
+        {
+            var parameters = (JObject)job["parameters"];
+            if ((string)job["phase"] == "starting")
+            {
+                EnsureEditorIdleAndEditing("Unity tests");
+                if (EditorUtility.scriptCompilationFailed)
+                {
+                    throw new InvalidOperationException(
+                        "Unity tests cannot start while the project has script compilation errors.");
+                }
+                string relativePath;
+                var reportPath = DccMcpTestRunner.PrepareReportPath(
+                    (string)job["request_id"],
+                    out relativePath);
+                job["test_report_path"] = reportPath;
+                job["test_report_relative_path"] = NormalizeSeparators(relativePath);
+                job["phase"] = "waiting_for_tests";
+                Touch(job);
+                SaveStore(store);
+                DccMcpTestRunner.Start(parameters, reportPath);
+                return;
+            }
+            if ((string)job["phase"] != "waiting_for_tests")
+            {
+                throw new InvalidOperationException(
+                    "Unknown Unity test job phase: " + (string)job["phase"]);
+            }
+            if (TimedOut(job, TimeSpan.FromMinutes(20)))
+            {
+                throw new InvalidOperationException("Unity tests did not finish within 20 minutes.");
+            }
+
+            DccMcpTestRunner.EnsureCallback(
+                (string)job["request_id"],
+                (string)job["test_report_path"]);
+
+            JObject summary;
+            if (!DccMcpTestRunner.TrySummarizeReport(
+                (string)job["test_report_path"],
+                out summary))
+            {
+                Touch(job);
+                return;
+            }
+            summary["path"] = NormalizeSeparators((string)job["test_report_path"]);
+            summary["relative_path"] = (string)job["test_report_relative_path"];
+            summary["test_mode"] = parameters["test_mode"].DeepClone();
+            summary["test_names"] = parameters["test_names"].DeepClone();
+            DccMcpTestRunner.ReleaseCallback((string)job["request_id"]);
+            Succeed(job, summary);
+        }
+
         private static void EnsureBuildScenesUnchanged(JArray recorded, string[] current)
         {
             if (recorded == null || recorded.Count != current.Length)
@@ -819,6 +876,10 @@ namespace DccMcp.Unity
 
         private static JObject NormalizeJobParameters(string kind, JObject parameters)
         {
+            if (kind == "project.run_tests")
+            {
+                return DccMcpTestRunner.NormalizeParameters(parameters);
+            }
             var requestId = NormalizeRequestId(parameters["request_id"]);
             var normalized = new JObject { ["request_id"] = requestId };
             switch (kind)
@@ -1176,6 +1237,32 @@ namespace DccMcp.Unity
             }
         }
 
+        private static void RestoreTestCallbackAfterReload()
+        {
+            try
+            {
+                foreach (JObject job in (JArray)LoadStore()["jobs"])
+                {
+                    if ((string)job["kind"] != "project.run_tests"
+                        || (string)job["state"] != "running"
+                        || (string)job["phase"] != "waiting_for_tests"
+                        || job["test_report_path"] == null)
+                    {
+                        continue;
+                    }
+                    DccMcpTestRunner.EnsureCallback(
+                        (string)job["request_id"],
+                        (string)job["test_report_path"]);
+                }
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning(
+                    "DCC-MCP Unity could not restore its Test Runner callback: "
+                    + exception.Message);
+            }
+        }
+
         private static void SaveStore(JObject store)
         {
             SessionState.SetString(SessionStateKey, store.ToString(Formatting.None));
@@ -1215,11 +1302,17 @@ namespace DccMcp.Unity
             job.Remove("capture_after_frame");
             job.Remove("idle_since_utc");
             job.Remove("build_scenes");
+            job.Remove("test_report_path");
+            job.Remove("test_report_relative_path");
             Touch(job);
         }
 
         private static void Fail(JObject job, string message)
         {
+            if ((string)job["kind"] == "project.run_tests")
+            {
+                DccMcpTestRunner.ReleaseCallback((string)job["request_id"]);
+            }
             job["state"] = "failed";
             job["phase"] = "complete";
             job["error"] = message;
@@ -1230,6 +1323,8 @@ namespace DccMcp.Unity
             job.Remove("capture_after_frame");
             job.Remove("idle_since_utc");
             job.Remove("build_scenes");
+            job.Remove("test_report_path");
+            job.Remove("test_report_relative_path");
             Touch(job);
         }
 
