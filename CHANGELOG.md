@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.5.1...v0.6.0) (2026-07-22)
+
+
+### Features
+
+* add typed Unity Test Runner jobs ([#15](https://github.com/dcc-mcp/dcc-mcp-unity/issues/15)) ([8f99bd4](https://github.com/dcc-mcp/dcc-mcp-unity/commit/8f99bd471f36a357aa1d17c54c24c1d7ece4df70))
+
 ## [0.5.1](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.5.0...v0.5.1) (2026-07-21)
 
 
