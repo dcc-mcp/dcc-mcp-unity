@@ -1,8 +1,10 @@
 import json
 import re
+import threading
 from pathlib import Path
 
 from dcc_mcp_unity import __version__
+from dcc_mcp_unity import server as server_module
 from dcc_mcp_unity.server import UnityMcpServer
 
 ROOT = Path(__file__).parents[1]
@@ -24,6 +26,55 @@ def test_server_uses_dynamic_port_by_default(monkeypatch):
     server = UnityMcpServer()
     try:
         assert server._options.port == 0
+    finally:
+        server.stop()
+
+
+def test_server_readiness_monitor_tracks_unity_bridge_connection(monkeypatch):
+    connected = threading.Event()
+    transitioned = {False: threading.Event(), True: threading.Event()}
+
+    class FakeBridge:
+        def is_connected(self):
+            return connected.is_set()
+
+    monkeypatch.setattr(server_module, "get_bridge", FakeBridge)
+    monkeypatch.setattr(server_module, "_READINESS_POLL_SECONDS", 0.001)
+    server = UnityMcpServer(port=0)
+    set_readiness = server._set_bridge_readiness
+
+    def record_transition(ready):
+        set_readiness(ready)
+        transitioned[ready].set()
+
+    monkeypatch.setattr(server, "_set_bridge_readiness", record_transition)
+    try:
+        server._start_readiness_monitor()
+        assert transitioned[False].wait(timeout=1.0)
+        assert server._readiness.report_subset() == {
+            "process": True,
+            "dcc": False,
+            "skill_catalog": True,
+            "dispatcher": False,
+            "host_execution_bridge": False,
+            "main_thread_executor": False,
+        }
+
+        connected.set()
+        assert transitioned[True].wait(timeout=1.0)
+        assert server._readiness.report_subset() == {
+            "process": True,
+            "dcc": True,
+            "skill_catalog": True,
+            "dispatcher": True,
+            "host_execution_bridge": True,
+            "main_thread_executor": True,
+        }
+
+        transitioned[False] = threading.Event()
+        connected.clear()
+        assert transitioned[False].wait(timeout=1.0)
+        assert server._readiness.report_subset()["dcc"] is False
     finally:
         server.stop()
 
