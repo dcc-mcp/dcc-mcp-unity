@@ -85,6 +85,7 @@ def test_bundled_skills_release_and_upm_package_exist():
         "unity-diagnostics",
         "unity-project",
         "unity-scene",
+        "unity-tuanjie-ai",
     }
     assert (ROOT / ".github" / "workflows" / "release.yml").is_file()
     package = json.loads((PACKAGE / "package.json").read_text(encoding="utf-8"))
@@ -298,5 +299,28 @@ def test_runtime_version_matches_distribution_metadata():
         "src/dcc_mcp_unity/skills/unity-project/SKILL.md",
         "src/dcc_mcp_unity/skills/unity-scene/SKILL.md",
         "src/dcc_mcp_unity/skills/unity-diagnostics/SKILL.md",
+        "src/dcc_mcp_unity/skills/unity-tuanjie-ai/SKILL.md",
         "uv.lock",
     } <= extra_paths
+
+
+def test_tuanjie_ai_skill_reuses_optional_native_custom_tools():
+    skill = ROOT / "src" / "dcc_mcp_unity" / "skills" / "unity-tuanjie-ai"
+    tools = (skill / "tools.yaml").read_text(encoding="utf-8")
+    inspect_script = (skill / "scripts" / "inspect_tuanjie_ai.py").read_text(encoding="utf-8")
+    execute_script = (skill / "scripts" / "execute_tuanjie_ai.py").read_text(encoding="utf-8")
+    host = (PACKAGE / "Editor" / "DccMcpTuanjieAi.cs").read_text(encoding="utf-8")
+    commands = (PACKAGE / "Editor" / "DccMcpCommands.cs").read_text(encoding="utf-8")
+
+    assert 'call_host("tuanjie_ai.inspect")' in inspect_script
+    assert '"tuanjie_ai.execute"' in execute_script
+    assert "requests" not in inspect_script + execute_script
+    assert "UnityTcp.CustomTool" in host
+    assert "ExecuteCustomTool" in host
+    assert "System.Net" not in host
+    assert 'case "tuanjie_ai.inspect"' in commands
+    assert 'case "tuanjie_ai.execute"' in commands
+    assert 'method == "tuanjie_ai.execute"' in commands
+    assert "read_only: true" in tools
+    assert "destructive: true" in tools
+    assert "idempotent: false" in tools

@@ -78,6 +78,9 @@ For local development, run `dcc-mcp-unity-standalone --bridge-port 3852 --watch-
    retain integer output, and both forms are accepted as input.
 5. Create GameObjects or change transforms through typed operations backed by Unity Undo, verify
    the hierarchy, then explicitly call `save_scene`.
+6. In Tuanjie projects with its optional AI packages installed, load `unity-tuanjie-ai`, inspect
+   the native CustomTool catalog, then submit or query only a freshly returned tool name. Native
+   Codely sign-in, credits, downloads, and task recovery remain owned by Tuanjie.
 6. Use `set_play_mode` before `capture_game_view`; capture requires active, unpaused Play Mode,
    focuses Game View, waits a rendered frame, and succeeds only after Unity decodes a nonzero PNG
    below `Builds/DccMcp/Captures`. Captures are limited to 32 MiB, 8192 pixels per axis, and
