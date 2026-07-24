@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.5](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.6.4...v0.6.5) (2026-07-24)
+
+
+### Bug Fixes
+
+* build Tuanjie scene assets ([#30](https://github.com/dcc-mcp/dcc-mcp-unity/issues/30)) ([ead28a8](https://github.com/dcc-mcp/dcc-mcp-unity/commit/ead28a85517c72eb9f0465842ad03aa23e439cc1))
+
 ## [0.6.4](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.6.3...v0.6.4) (2026-07-24)
 
 
