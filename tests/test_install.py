@@ -28,6 +28,11 @@ def test_install_supports_unity_2018_4_lts(tmp_path: Path):
     assert install_package(tmp_path).is_dir()
 
 
+def test_install_supports_tuanjie_editor(tmp_path: Path):
+    make_unity_project(tmp_path, "2022.3.62t11")
+    assert install_package(tmp_path).is_dir()
+
+
 def test_install_rejects_non_unity_directory(tmp_path: Path):
     with pytest.raises(ValueError, match="not a Unity project"):
         install_package(tmp_path)
