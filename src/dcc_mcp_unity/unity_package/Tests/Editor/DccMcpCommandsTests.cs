@@ -701,6 +701,19 @@ namespace DccMcp.Unity.Tests
             Assert.That(DccMcpBridge.IsBatchProcessWithoutEditorTests(false, true), Is.False);
         }
 
+        [Test]
+        public void TuanjieAiIsOptionalAndRequiresAnExplicitNativeTool()
+        {
+            var inspected = DccMcpCommands.Execute("tuanjie_ai.inspect", new JObject());
+            Assert.That(inspected["available"], Is.Not.Null);
+            Assert.That(inspected["tools"], Is.TypeOf<JArray>());
+
+            Assert.That(
+                () => DccMcpCommands.Execute("tuanjie_ai.execute", new JObject()),
+                Throws.TypeOf<InvalidOperationException>()
+                    .With.Message.EqualTo("tool_name is required."));
+        }
+
         private sealed class ThrowingReadStream : MemoryStream
         {
             internal ThrowingReadStream(int length)

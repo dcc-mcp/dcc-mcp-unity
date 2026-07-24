@@ -34,6 +34,10 @@
         },
         {
           "type": "generic",
+          "path": "src/dcc_mcp_unity/skills/unity-tuanjie-ai/SKILL.md"
+        },
+        {
+          "type": "generic",
           "path": "uv.lock"
         }
       ]

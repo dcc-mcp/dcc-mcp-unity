@@ -65,6 +65,12 @@ namespace DccMcp.Unity
                     case "editor.read_console":
                         result = DccMcpConsole.Read(parameters);
                         break;
+                    case "tuanjie_ai.inspect":
+                        result = DccMcpTuanjieAi.Inspect();
+                        break;
+                    case "tuanjie_ai.execute":
+                        result = DccMcpTuanjieAi.Execute(parameters);
+                        break;
                     default:
                         throw new InvalidOperationException("Unknown Unity action: " + method);
                 }
@@ -96,7 +102,8 @@ namespace DccMcp.Unity
             var mutating = method == "assets.refresh"
                 || method == "scene.create_game_object"
                 || method == "scene.set_transform"
-                || method == "scene.save";
+                || method == "scene.save"
+                || method == "tuanjie_ai.execute";
             if (!mutating)
             {
                 return;
