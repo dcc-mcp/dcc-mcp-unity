@@ -12,10 +12,10 @@ MIN_UNITY_VERSION = (2018, 4, 25)
 MIN_UNITY_RELEASE = ("f", 1)
 _EDITOR_VERSION_PATTERN = re.compile(r"^m_EditorVersion:\s*(\S+)\s*$", re.MULTILINE)
 _UNITY_VERSION_PATTERN = re.compile(
-    r"^(\d+)\.(\d+)\.(\d+)([abfp])(\d+)(?:[a-z]\d+)*$",
+    r"^(\d+)\.(\d+)\.(\d+)([abfpt])(\d+)(?:[a-z]\d+)*$",
     re.IGNORECASE,
 )
-_RELEASE_CHANNEL_ORDER = {"a": 0, "b": 1, "f": 2, "p": 3}
+_RELEASE_CHANNEL_ORDER = {"a": 0, "b": 1, "f": 2, "t": 2, "p": 3}
 
 
 def read_unity_version(project: Path) -> str:
