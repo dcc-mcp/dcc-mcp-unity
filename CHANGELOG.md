@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.7.0...v0.8.0) (2026-07-24)
+
+
+### Features
+
+* **unity:** reuse Tuanjie AI custom tools ([#34](https://github.com/dcc-mcp/dcc-mcp-unity/issues/34)) ([bc0e5da](https://github.com/dcc-mcp/dcc-mcp-unity/commit/bc0e5da9b1542cc9b8d81ef449a8fd07cc266454))
+
 ## [0.7.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.6.5...v0.7.0) (2026-07-24)
 
 
