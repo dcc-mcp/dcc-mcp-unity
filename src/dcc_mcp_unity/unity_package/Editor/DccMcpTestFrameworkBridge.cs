@@ -247,13 +247,20 @@ namespace DccMcp.Unity
 
         private static object CreateExecutionSettings(Type settingsType, Type filterType, object filter)
         {
+            var filters = Array.CreateInstance(filterType, 1);
+            filters.SetValue(filter, 0);
+
+            var ctor = settingsType.GetConstructor(
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance,
+                null, new[] { filters.GetType() }, null);
+
+            if (ctor != null) return ctor.Invoke(new object[] { filters });
+
             var settings = Activator.CreateInstance(settingsType, true);
             if (TrySetMember(settings, "filter", filter))
             {
                 return settings;
             }
-            var filters = Array.CreateInstance(filterType, 1);
-            filters.SetValue(filter, 0);
             if (TrySetMember(settings, "filters", filters))
             {
                 return settings;
