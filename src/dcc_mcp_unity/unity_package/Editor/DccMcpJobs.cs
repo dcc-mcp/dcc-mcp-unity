@@ -696,10 +696,10 @@ namespace DccMcp.Unity
                 var path = (scene.path ?? string.Empty).Replace('\\', '/');
                 if (string.IsNullOrEmpty(path)
                     || !path.StartsWith("Assets/", StringComparison.Ordinal)
-                    || !path.EndsWith(".unity", StringComparison.OrdinalIgnoreCase))
+                    || !HasSupportedSceneExtension(path))
                 {
                     throw new InvalidOperationException(
-                        "Every enabled Build Settings scene must be a saved .unity asset below Assets.");
+                        "Every enabled Build Settings scene must be a saved .unity or .scene asset below Assets.");
                 }
                 if (!enabled.Add(path))
                 {
@@ -733,6 +733,13 @@ namespace DccMcp.Unity
                 }
             }
             return scenes.ToArray();
+        }
+
+        internal static bool HasSupportedSceneExtension(string path)
+        {
+            return !string.IsNullOrEmpty(path)
+                && (path.EndsWith(".unity", StringComparison.OrdinalIgnoreCase)
+                    || path.EndsWith(".scene", StringComparison.OrdinalIgnoreCase));
         }
 
         private static void AdvanceTestRun(JObject store, JObject job)
