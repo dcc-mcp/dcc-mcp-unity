@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.4](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.6.3...v0.6.4) (2026-07-24)
+
+
+### Bug Fixes
+
+* persist restored build scenes in tests ([d8ac2ea](https://github.com/dcc-mcp/dcc-mcp-unity/commit/d8ac2ea0219c372502e0426bbcc4fe6dfce75c70))
+* support Tuanjie editor version suffix ([6b996e6](https://github.com/dcc-mcp/dcc-mcp-unity/commit/6b996e6ee336e4d95110017ebe74dc7f146e09ab))
+
 ## [0.6.3](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.6.2...v0.6.3) (2026-07-24)
 
 
