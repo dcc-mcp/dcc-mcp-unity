@@ -669,16 +669,17 @@ namespace DccMcp.Unity.Tests
         [Test]
         public void BridgeGuardSkipsImportWorkerAndBatchModeProcesses()
         {
-#if UNITY_2020_2_OR_NEWER
-            // In the real interactive Editor, IsAssetImportWorkerProcess returns false.
-            // This test verifies the guard method exists and returns the expected
-            // value for the interactive Editor (always false here).
+            // Every EditMode test process runs with -runTests: on Unity 2020.2+
+            // the worker probe is already false, and on older Unity the flag
+            // exempts test runs from the batch-mode fallback. The guard must
+            // stay false here so the bridge smoke and job pumps keep working.
             Assert.That(DccMcpBridge.IsImportWorkerOrBatchMode(), Is.False);
-#else
-            // On older Unity, we fall back to Application.isBatchMode which is false
-            // in interactive Editor mode.
-            Assert.That(DccMcpBridge.IsImportWorkerOrBatchMode(), Is.False);
-#endif
+            // Genuine non-interactive batch processes (builds, import workers on
+            // Unity versions without the worker probe) must still be skipped.
+            Assert.That(DccMcpBridge.IsBatchProcessWithoutEditorTests(true, false), Is.True);
+            Assert.That(DccMcpBridge.IsBatchProcessWithoutEditorTests(true, true), Is.False);
+            Assert.That(DccMcpBridge.IsBatchProcessWithoutEditorTests(false, false), Is.False);
+            Assert.That(DccMcpBridge.IsBatchProcessWithoutEditorTests(false, true), Is.False);
         }
 
         private sealed class ThrowingReadStream : MemoryStream
