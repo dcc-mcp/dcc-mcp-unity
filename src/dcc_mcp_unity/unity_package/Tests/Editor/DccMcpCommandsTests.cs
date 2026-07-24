@@ -367,7 +367,7 @@ namespace DccMcp.Unity.Tests
                 Assert.That(
                     () => DccMcpJobs.ValidateEnabledBuildScenes(),
                     Throws.TypeOf<InvalidOperationException>()
-                        .With.Message.Contains("saved .unity asset"));
+                        .With.Message.Contains("saved .unity or .scene asset"));
 
                 var scenePath = "Assets/DccMcpJobTests/BuildScene.unity";
                 var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
@@ -388,6 +388,16 @@ namespace DccMcp.Unity.Tests
                 EditorBuildSettings.scenes = originalScenes;
                 AssetDatabase.SaveAssets();
             }
+        }
+
+        [TestCase("Assets/Scenes/Game.unity", true)]
+        [TestCase("Assets/Scenes/Game.scene", true)]
+        [TestCase("Assets/Scenes/Game.txt", false)]
+        public void SupportedBuildSceneExtensionsMatchUnityAndTuanjie(
+            string path,
+            bool expected)
+        {
+            Assert.That(DccMcpJobs.HasSupportedSceneExtension(path), Is.EqualTo(expected));
         }
 
         [Test]
