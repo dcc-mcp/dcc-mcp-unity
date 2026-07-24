@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.3](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.6.2...v0.6.3) (2026-07-24)
+
+
+### Bug Fixes
+
+* exempt editor test runs from the batch-mode bridge guard ([5ff9381](https://github.com/dcc-mcp/dcc-mcp-unity/commit/5ff9381f9097c14d81adb0da72178f0be6d20b9f))
+* prevent AssetImportWorker and batch-mode processes from connecting to bridge ([24f8daa](https://github.com/dcc-mcp/dcc-mcp-unity/commit/24f8daa319b44def5fcb836d940b64a768c228e0)), closes [#19](https://github.com/dcc-mcp/dcc-mcp-unity/issues/19)
+* support UTF 1.1.x ExecutionSettings(params Filter[]) constructor ([#26](https://github.com/dcc-mcp/dcc-mcp-unity/issues/26)) ([b439cfe](https://github.com/dcc-mcp/dcc-mcp-unity/commit/b439cfe6f48ecbf7e50551dbe2deaff942dedd54)), closes [#20](https://github.com/dcc-mcp/dcc-mcp-unity/issues/20)
+
 ## [0.6.2](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.6.1...v0.6.2) (2026-07-22)
 
 
