@@ -119,8 +119,34 @@ namespace DccMcp.Unity
 #if UNITY_2020_2_OR_NEWER
             return AssetDatabase.IsAssetImportWorkerProcess();
 #else
-            return Application.isBatchMode;
+            return IsBatchProcessWithoutEditorTests(
+                Application.isBatchMode,
+                IsRunningEditorTests());
 #endif
+        }
+
+        // Decision helper kept separate so EditMode tests can cover every branch
+        // without depending on the live process state.
+        internal static bool IsBatchProcessWithoutEditorTests(bool isBatchMode, bool isRunningEditorTests)
+        {
+            return isBatchMode && !isRunningEditorTests;
+        }
+
+        private static bool IsRunningEditorTests()
+        {
+            // Editor test runs (-runTests) pump the normal update loop through the
+            // Test Runner, so they can serve bridge requests like the interactive
+            // Editor. Genuine non-interactive batch processes (builds and import
+            // workers on Unity versions without the worker probe) never carry
+            // this flag.
+            foreach (var argument in Environment.GetCommandLineArgs())
+            {
+                if (string.Equals(argument, "-runTests", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+            return false;
         }
 
         private static void Stop()

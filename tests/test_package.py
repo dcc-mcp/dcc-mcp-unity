@@ -199,6 +199,7 @@ def test_unity_bridge_preserves_main_thread_and_undo_contracts():
     assert "AssetDatabase.IsAssetImportWorkerProcess" in bridge
     assert "Application.isBatchMode" in bridge
     assert "UNITY_2020_2_OR_NEWER" in bridge
+    assert '"-runTests"' in bridge
 
 
 def test_unity_bridge_network_awaits_do_not_capture_editor_context():
@@ -215,7 +216,8 @@ def test_unity_bridge_network_awaits_do_not_capture_editor_context():
 def test_initialize_on_load_classes_guard_against_import_workers():
     editor_dir = PACKAGE / "Editor"
     initialize_on_load_files = [
-        f for f in editor_dir.iterdir()
+        f
+        for f in editor_dir.iterdir()
         if f.suffix == ".cs" and "[InitializeOnLoad]" in f.read_text(encoding="utf-8")
     ]
     assert len(initialize_on_load_files) == 3, (
