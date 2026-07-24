@@ -21,6 +21,12 @@ _server: Optional["UnityMcpServer"] = None
 _READINESS_POLL_SECONDS = 0.25
 
 
+def publish_scene_snapshot(snapshot: dict[str, Any]) -> None:
+    """Publish a bounded Unity scene inspection through Core resources."""
+    if _server is not None:
+        _server.set_scene_resource(snapshot)
+
+
 class UnityMcpServer(DccServerBase):
     """DCC-MCP server backed by the bundled Unity Editor package."""
 
