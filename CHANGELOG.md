@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.6.5...v0.7.0) (2026-07-24)
+
+
+### Features
+
+* publish Unity scene state deltas ([#32](https://github.com/dcc-mcp/dcc-mcp-unity/issues/32)) ([45886ce](https://github.com/dcc-mcp/dcc-mcp-unity/commit/45886ce363f38cd51cb0957eaf06e49e292bc272))
+
 ## [0.6.5](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.6.4...v0.6.5) (2026-07-24)
 
 
