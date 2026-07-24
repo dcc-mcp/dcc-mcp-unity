@@ -355,30 +355,39 @@ namespace DccMcp.Unity.Tests
         [Test]
         public void EnabledBuildScenesMustExistAndHaveNoUnsavedOpenChanges()
         {
+            var originalScenes = EditorBuildSettings.scenes;
             var testDirectory = Path.Combine(Application.dataPath, "DccMcpJobTests");
-            Directory.CreateDirectory(testDirectory);
-            var invalidScenePath = "Assets/DccMcpJobTests/NotAScene.txt";
-            File.WriteAllText(Path.Combine(testDirectory, "NotAScene.txt"), "not a scene");
-            AssetDatabase.ImportAsset(invalidScenePath);
-            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(invalidScenePath, true) };
-            Assert.That(
-                () => DccMcpJobs.ValidateEnabledBuildScenes(),
-                Throws.TypeOf<InvalidOperationException>()
-                    .With.Message.Contains("saved .unity asset"));
+            try
+            {
+                Directory.CreateDirectory(testDirectory);
+                var invalidScenePath = "Assets/DccMcpJobTests/NotAScene.txt";
+                File.WriteAllText(Path.Combine(testDirectory, "NotAScene.txt"), "not a scene");
+                AssetDatabase.ImportAsset(invalidScenePath);
+                EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(invalidScenePath, true) };
+                Assert.That(
+                    () => DccMcpJobs.ValidateEnabledBuildScenes(),
+                    Throws.TypeOf<InvalidOperationException>()
+                        .With.Message.Contains("saved .unity asset"));
 
-            var scenePath = "Assets/DccMcpJobTests/BuildScene.unity";
-            var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
-            Assert.That(EditorSceneManager.SaveScene(scene, scenePath), Is.True);
-            EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(scenePath, true) };
+                var scenePath = "Assets/DccMcpJobTests/BuildScene.unity";
+                var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+                Assert.That(EditorSceneManager.SaveScene(scene, scenePath), Is.True);
+                EditorBuildSettings.scenes = new[] { new EditorBuildSettingsScene(scenePath, true) };
 
-            Assert.That(DccMcpJobs.ValidateEnabledBuildScenes(), Is.EqualTo(new[] { scenePath }));
+                Assert.That(DccMcpJobs.ValidateEnabledBuildScenes(), Is.EqualTo(new[] { scenePath }));
 
-            new GameObject("Unsaved change");
-            EditorSceneManager.MarkSceneDirty(scene);
-            Assert.That(
-                () => DccMcpJobs.ValidateEnabledBuildScenes(),
-                Throws.TypeOf<InvalidOperationException>()
-                    .With.Message.Contains("unsaved changes"));
+                new GameObject("Unsaved change");
+                EditorSceneManager.MarkSceneDirty(scene);
+                Assert.That(
+                    () => DccMcpJobs.ValidateEnabledBuildScenes(),
+                    Throws.TypeOf<InvalidOperationException>()
+                        .With.Message.Contains("unsaved changes"));
+            }
+            finally
+            {
+                EditorBuildSettings.scenes = originalScenes;
+                AssetDatabase.SaveAssets();
+            }
         }
 
         [Test]
