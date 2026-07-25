@@ -52,11 +52,50 @@ def _apply_options(options: argparse.Namespace) -> None:
         os.environ["DCC_MCP_UNITY_PORT"] = str(options.mcp_port)
 
 
+def _process_is_alive(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+        kernel32.WaitForSingleObject.restype = wintypes.DWORD
+        kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel32.CloseHandle.restype = wintypes.BOOL
+        handle = kernel32.OpenProcess(0x00100000, False, pid)
+        if not handle:
+            error = ctypes.get_last_error()
+            if error == 5:
+                return True
+            if error == 87:
+                return False
+            raise OSError(error, ctypes.FormatError(error))
+        try:
+            result = kernel32.WaitForSingleObject(handle, 0)
+            if result == 258:
+                return True
+            if result == 0:
+                return False
+            raise OSError(ctypes.get_last_error(), "WaitForSingleObject failed")
+        finally:
+            kernel32.CloseHandle(handle)
+
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 def _watch_pid(pid: int, stop: threading.Event) -> None:
     while not stop.is_set():
-        try:
-            os.kill(pid, 0)
-        except (OSError, ProcessLookupError):
+        if not _process_is_alive(pid):
             stop.set()
             return
         time.sleep(1.0)
@@ -66,17 +105,53 @@ def _claim_pid_file(path: str | None) -> Path | None:
     if not path:
         return None
     pid_path = Path(path).expanduser().resolve()
-    if pid_path.exists():
-        try:
-            old_pid = int(pid_path.read_text(encoding="ascii").strip())
-            os.kill(old_pid, 0)
-        except (OSError, ProcessLookupError, ValueError):
-            pid_path.unlink(missing_ok=True)
-        else:
-            raise SystemExit(f"dcc-mcp-unity sidecar is already running (pid {old_pid})")
     pid_path.parent.mkdir(parents=True, exist_ok=True)
-    pid_path.write_text(str(os.getpid()), encoding="ascii")
-    return pid_path
+    candidate = pid_path.with_name(
+        f".{pid_path.name}.{os.getpid()}.{threading.get_ident()}.{time.time_ns()}"
+    )
+    candidate.write_text(str(os.getpid()), encoding="ascii")
+    try:
+        while True:
+            try:
+                os.link(candidate, pid_path)
+                return pid_path
+            except FileExistsError:
+                pass
+            try:
+                existing = pid_path.stat()
+                raw_pid = pid_path.read_text(encoding="ascii").strip()
+            except FileNotFoundError:
+                continue
+            try:
+                old_pid = int(raw_pid)
+            except ValueError:
+                old_pid = None
+            if old_pid is not None and _process_is_alive(old_pid):
+                raise SystemExit(f"dcc-mcp-unity sidecar is already running (pid {old_pid})")
+            try:
+                current = pid_path.stat()
+                if (current.st_dev, current.st_ino) == (existing.st_dev, existing.st_ino):
+                    pid_path.unlink()
+            except FileNotFoundError:
+                pass
+    finally:
+        candidate.unlink(missing_ok=True)
+
+
+def _release_pid_file(pid_path: Path | None) -> None:
+    if pid_path is None:
+        return
+    try:
+        existing = pid_path.stat()
+        owner = int(pid_path.read_text(encoding="ascii").strip())
+        current = pid_path.stat()
+    except (FileNotFoundError, ValueError):
+        return
+    if owner == os.getpid() and (current.st_dev, current.st_ino) == (
+        existing.st_dev,
+        existing.st_ino,
+    ):
+        pid_path.unlink(missing_ok=True)
 
 
 def main(argv: Sequence[str] | None = None) -> None:
@@ -94,8 +169,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         try:
             _server_main()
         finally:
-            if pid_file is not None:
-                pid_file.unlink(missing_ok=True)
+            _release_pid_file(pid_file)
         return
 
     stopped = threading.Event()
@@ -110,8 +184,7 @@ def main(argv: Sequence[str] | None = None) -> None:
         _server_main_until(stopped)
     finally:
         stopped.set()
-        if pid_file is not None:
-            pid_file.unlink(missing_ok=True)
+        _release_pid_file(pid_file)
 
 
 def _server_main_until(stopped: threading.Event) -> None:
