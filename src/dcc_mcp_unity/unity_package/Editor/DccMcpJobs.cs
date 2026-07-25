@@ -235,6 +235,16 @@ namespace DccMcp.Unity
         private static void AdvanceUpsert(JObject store, JObject job)
         {
             RequireSourceWriteGate();
+            if (EditorApplication.isCompiling || EditorApplication.isUpdating)
+            {
+                if (TimedOut(job, TimeSpan.FromMinutes(10)))
+                {
+                    throw new InvalidOperationException(
+                        "Unity did not become ready for a source write within 10 minutes.");
+                }
+                Touch(job);
+                return;
+            }
             EnsureEditorIdleAndEditing("Source writes");
             var parameters = (JObject)job["parameters"];
             var relativePath = (string)parameters["path"];

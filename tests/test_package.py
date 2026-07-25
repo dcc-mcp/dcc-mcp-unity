@@ -214,6 +214,26 @@ def test_unity_bridge_network_awaits_do_not_capture_editor_context():
     assert bridge.index("Debug.Log(log.Message)") > bridge.index("OnEditorUpdate()")
 
 
+def test_text_asset_jobs_wait_for_transient_editor_updates():
+    jobs = (PACKAGE / "Editor" / "DccMcpJobs.cs").read_text(encoding="utf-8")
+    advance_upsert = jobs[jobs.index("private static void AdvanceUpsert") :]
+    next_method = advance_upsert.index("internal static void ReplaceExistingFileWithCas")
+    advance_upsert = advance_upsert[:next_method]
+
+    assert "TimedOut(job, TimeSpan.FromMinutes(10))" in advance_upsert
+    assert "EditorApplication.isCompiling || EditorApplication.isUpdating" in advance_upsert
+    assert advance_upsert.index("EditorApplication.isCompiling") < advance_upsert.index(
+        "AcquireAssetWriteLock"
+    )
+
+
+def test_unity_test_cleanup_finishes_asset_refresh_synchronously():
+    tests = (PACKAGE / "Tests" / "Editor" / "DccMcpCommandsTests.cs").read_text(encoding="utf-8")
+
+    assert "AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);" in tests
+    assert "MaxJobPollFrames = 600" in tests
+
+
 def test_initialize_on_load_classes_guard_against_import_workers():
     editor_dir = PACKAGE / "Editor"
     initialize_on_load_files = [
