@@ -228,9 +228,7 @@ def test_text_asset_jobs_wait_for_transient_editor_updates():
 
 
 def test_unity_test_cleanup_finishes_asset_refresh_synchronously():
-    tests = (PACKAGE / "Tests" / "Editor" / "DccMcpCommandsTests.cs").read_text(
-        encoding="utf-8"
-    )
+    tests = (PACKAGE / "Tests" / "Editor" / "DccMcpCommandsTests.cs").read_text(encoding="utf-8")
 
     assert "AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);" in tests
     assert "MaxJobPollFrames = 600" in tests
