@@ -252,6 +252,21 @@ def test_initialize_on_load_classes_guard_against_import_workers():
         )
 
 
+def test_unity_menu_unifies_dcc_mcp_entry_points():
+    menu = (PACKAGE / "Editor" / "DccMcpMenu.cs").read_text(encoding="utf-8")
+    assert 'MenuItem("DCC MCP/Copy Instance ID"' in menu
+    assert 'MenuItem("DCC MCP/Server Info"' in menu
+    assert 'MenuItem("DCC MCP/About DCC MCP"' in menu
+    assert "GUIUtility.systemCopyBuffer" in menu
+    assert "GetSessionInstanceId" in menu
+    assert "EditorUtility.DisplayDialog" in menu
+    assert "dcc-mcp-unity v" in menu
+    assert "DCC MCP — Server Info" in menu
+    assert "About DCC MCP" in menu or '"About DCC MCP"' in menu
+    assert "Instance UUID" in menu
+    assert "Bridge URL" in menu
+
+
 def test_scene_tools_treat_unity_object_ids_as_opaque_values():
     tools = (ROOT / "src" / "dcc_mcp_unity" / "skills" / "unity-scene" / "tools.yaml").read_text(
         encoding="utf-8"

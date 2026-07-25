@@ -114,6 +114,11 @@ namespace DccMcp.Unity
             _ = RunAsync(Lifetime.Token);
         }
 
+        internal static string GetSessionInstanceId()
+        {
+            return SessionInstanceId;
+        }
+
         internal static bool IsImportWorkerOrBatchMode()
         {
 #if UNITY_2020_2_OR_NEWER
