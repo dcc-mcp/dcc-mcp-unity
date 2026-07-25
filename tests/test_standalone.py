@@ -23,6 +23,11 @@ def test_standalone_options_are_explicit() -> None:
     assert options.watch_pid == 12
 
 
+def test_default_cli_uses_the_lifecycle_entrypoint() -> None:
+    pyproject = (Path(__file__).parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'dcc-mcp-unity = "dcc_mcp_unity._standalone_entry:main"' in pyproject
+
+
 def test_pid_file_claim_is_atomic(tmp_path, monkeypatch) -> None:
     pid_file = tmp_path / "sidecar.pid"
     barrier = threading.Barrier(2)
