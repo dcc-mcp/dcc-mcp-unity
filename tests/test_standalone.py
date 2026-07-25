@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from dcc_mcp_unity._standalone_entry import _parse_args
 
 
@@ -10,3 +12,8 @@ def test_standalone_options_are_explicit() -> None:
     assert options.bridge_port == 4000
     assert options.mcp_port == 4100
     assert options.watch_pid == 12
+
+
+def test_default_cli_uses_the_lifecycle_entrypoint() -> None:
+    pyproject = (Path(__file__).parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'dcc-mcp-unity = "dcc_mcp_unity._standalone_entry:main"' in pyproject
