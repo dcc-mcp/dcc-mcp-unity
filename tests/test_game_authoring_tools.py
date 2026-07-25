@@ -99,6 +99,34 @@ def test_game_authoring_wrappers_forward_only_typed_arguments(
     assert calls == [(method, arguments)]
 
 
+def test_tuanjie_ai_wrapper_preserves_native_envelope(monkeypatch):
+    module = _load_script("unity-tuanjie-ai", "execute_tuanjie_ai")
+    native_result = {
+        "success": True,
+        "message": "Session assets listed.",
+        "prompt": "Select an asset.",
+        "assets": [],
+    }
+    monkeypatch.setattr(module, "call_host", lambda *_args, **_kwargs: native_result)
+
+    result = module.main(tool_name="list_session_assets", parameters={})
+
+    assert result["success"] is True
+    assert result["context"]["native_result"] == native_result
+
+
+def test_tuanjie_ai_wrapper_propagates_native_failure(monkeypatch):
+    module = _load_script("unity-tuanjie-ai", "execute_tuanjie_ai")
+    native_result = {"success": False, "message": "'session_id' parameter is required"}
+    monkeypatch.setattr(module, "call_host", lambda *_args, **_kwargs: native_result)
+
+    result = module.main(tool_name="list_session_assets", parameters={})
+
+    assert result["success"] is False
+    assert result["error"] == native_result["message"]
+    assert result["context"]["native_result"] == native_result
+
+
 def test_game_authoring_manifests_declare_the_bounded_surface():
     project = (SKILLS / "unity-project" / "tools.yaml").read_text(encoding="utf-8")
     diagnostics = (SKILLS / "unity-diagnostics" / "tools.yaml").read_text(encoding="utf-8")
