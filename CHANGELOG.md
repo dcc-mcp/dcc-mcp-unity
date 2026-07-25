@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.10.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.9.0...v0.10.0) (2026-07-25)
+
+
+### Features
+
+* add unified DCC MCP menu with Copy Instance ID, Server Info, and About ([2124a59](https://github.com/dcc-mcp/dcc-mcp-unity/commit/2124a59d1e8993a313819c780b6b193d5b253671))
+
+
+### Bug Fixes
+
+* make sidecar pid ownership safe on Windows ([#46](https://github.com/dcc-mcp/dcc-mcp-unity/issues/46)) ([c3a8c4a](https://github.com/dcc-mcp/dcc-mcp-unity/commit/c3a8c4a5277c5081af48c5e3f6458f3d3d9df4d2))
+* remove duplicate GetSessionInstanceId in DccMcpBridge ([46360c4](https://github.com/dcc-mcp/dcc-mcp-unity/commit/46360c4adff4fd05fb86965cecbed726e70efefd))
+* route default CLI through sidecar lifecycle ([#45](https://github.com/dcc-mcp/dcc-mcp-unity/issues/45)) ([174c900](https://github.com/dcc-mcp/dcc-mcp-unity/commit/174c90069d0daa474a2e5bcdf1c63673945388d2))
+
 ## [0.9.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.8.1...v0.9.0) (2026-07-25)
 
 
