@@ -12,7 +12,6 @@
 ### Documentation
 
 * **readme:** remove competitor comparisons, add Unity 2018+ and Tuanjie Engine coverage ([67ba6cf](https://github.com/dcc-mcp/dcc-mcp-unity/commit/67ba6cfaad1b211095dddea22ac75676a7c23991))
-* **readme:** remove competitor comparisons, add Unity 2018+ and Tuanjie Engine coverage ([67ba6cf](https://github.com/dcc-mcp/dcc-mcp-unity/commit/67ba6cfaad1b211095dddea22ac75676a7c23991))
 * **readme:** remove competitor comparisons, emphasize Unity 2018+ support, add Tuanjie Engine section ([6cc66c3](https://github.com/dcc-mcp/dcc-mcp-unity/commit/6cc66c3da1870c732659d6e31302194efbb18d04))
 
 ## [0.8.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.7.0...v0.8.0) (2026-07-24)
