@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.8.1](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.8.0...v0.8.1) (2026-07-25)
+
+
+### Bug Fixes
+
+* **unity:** preserve Tuanjie native result envelopes ([#37](https://github.com/dcc-mcp/dcc-mcp-unity/issues/37)) ([9a3084f](https://github.com/dcc-mcp/dcc-mcp-unity/commit/9a3084fc83b9deb7140dcec451935e40a886bad3))
+* **unity:** wait out transient asset imports ([#39](https://github.com/dcc-mcp/dcc-mcp-unity/issues/39)) ([c818c52](https://github.com/dcc-mcp/dcc-mcp-unity/commit/c818c5276c08f20d1f0ff21f8f797f9c30547956))
+
+
+### Documentation
+
+* **readme:** remove competitor comparisons, add Unity 2018+ and Tuanjie Engine coverage ([67ba6cf](https://github.com/dcc-mcp/dcc-mcp-unity/commit/67ba6cfaad1b211095dddea22ac75676a7c23991))
+* **readme:** remove competitor comparisons, emphasize Unity 2018+ support, add Tuanjie Engine section ([6cc66c3](https://github.com/dcc-mcp/dcc-mcp-unity/commit/6cc66c3da1870c732659d6e31302194efbb18d04))
+
 ## [0.8.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.7.0...v0.8.0) (2026-07-24)
 
 
