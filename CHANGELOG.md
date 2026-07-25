@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.8.1...v0.9.0) (2026-07-25)
+
+
+### Features
+
+* **ci:** add Tuanjie Engine (团结引擎) CI validation workflow ([857093b](https://github.com/dcc-mcp/dcc-mcp-unity/commit/857093b696077eddb183dbbc6dfec0939e18b77b))
+
+
+### Bug Fixes
+
+* **unity:** expose native Tuanjie custom tools ([#42](https://github.com/dcc-mcp/dcc-mcp-unity/issues/42)) ([8c1174c](https://github.com/dcc-mcp/dcc-mcp-unity/commit/8c1174cc90684da02fda2670fc52c8f5e0422138))
+* **unity:** share module entry server state ([dc6efaf](https://github.com/dcc-mcp/dcc-mcp-unity/commit/dc6efafac3adc0d38040d7fd6ec7439056ebee3e))
+
 ## [0.8.1](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.8.0...v0.8.1) (2026-07-25)
 
 
