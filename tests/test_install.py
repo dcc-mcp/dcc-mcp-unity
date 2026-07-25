@@ -32,9 +32,9 @@ def test_install_supports_unity_2018_4_lts(tmp_path: Path):
     "version",
     [
         # Tuanjie 1.x (based on Unity 2022.3 LTS) — documented stable releases
-        "2022.3.47t1",   # Tuanjie 1.5
-        "2022.3.53t2",   # Tuanjie 1.6
-        "2022.3.58t5",   # Tuanjie 1.7
+        "2022.3.47t1",  # Tuanjie 1.5
+        "2022.3.53t2",  # Tuanjie 1.6
+        "2022.3.58t5",  # Tuanjie 1.7
         "2022.3.62t11",  # Tuanjie 1.9 (latest stable as of 2026-07)
         # Tuanjie 1.x edge cases: high patch and release numbers
         "2022.3.99t99",
