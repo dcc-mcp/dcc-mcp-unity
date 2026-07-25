@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import signal
+import sys
 import threading
 from pathlib import Path
 from typing import Any, Optional
@@ -151,5 +152,10 @@ def main() -> None:
         stop_server()
 
 
-if __name__ == "__main__":
+def _run_module_entrypoint() -> None:
+    sys.modules["dcc_mcp_unity.server"] = sys.modules[__name__]
     main()
+
+
+if __name__ == "__main__":
+    _run_module_entrypoint()
