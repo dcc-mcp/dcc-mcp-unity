@@ -715,6 +715,22 @@ namespace DccMcp.Unity.Tests
                     .With.Message.EqualTo("tool_name is required."));
         }
 
+        [Test]
+        public void TuanjieAiUsesTheNativeCustomToolRegistry()
+        {
+            CollectionAssert.AreEqual(
+                new[] { "official_tool", "third_party_tool" },
+                DccMcpTuanjieAi.DiscoverRegisteredToolNames(typeof(FakeTuanjieBridge)));
+        }
+
+        private static class FakeTuanjieBridge
+        {
+            public static string[] GetRegisteredTools()
+            {
+                return new[] { "third_party_tool", "official_tool" };
+            }
+        }
+
         private sealed class ThrowingReadStream : MemoryStream
         {
             internal ThrowingReadStream(int length)

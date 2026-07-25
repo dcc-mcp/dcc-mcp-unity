@@ -6,7 +6,7 @@ description: >-
   material, audio, video, terrain, and session-asset tasks. Not for other Unity
   project or scene operations.
 license: MIT
-compatibility: "Tuanjie with cn.tuanjie.codely.bridge and cn.tuanjie.ai.generators; dcc-mcp-core 0.19.45+"
+compatibility: "Tuanjie with cn.tuanjie.codely.bridge and a native CustomTool provider; dcc-mcp-core 0.19.45+"
 allowed-tools: "python"
 metadata:
   dcc-mcp:
@@ -24,9 +24,10 @@ metadata:
 Call `inspect_tuanjie_ai` first and execute only a tool name returned by that fresh result. The
 adapter delegates to the installed Tuanjie package; it does not copy its HTTP client, credentials,
 credit rules, downloads, or recovery logic. Tuanjie/Codely sign-in and sufficient credits remain
-host prerequisites.
+host prerequisites. The official `cn.tuanjie.ai.generators` package is optional: other plugins can
+extend this Skill by registering valid tools with the bridge's native `CustomTool` contract.
 
 Generation can spend credits and import or replace project assets. Pass the current agent session
-identifier when the native tool supports `sessionId`, then poll with the matching native status tool.
+identifier when the native tool supports `session_id`, then poll with the matching native status tool.
 Do not retry a timed-out submission: inspect native task/session state first. Verify generated assets
 and their usage terms before shipping them.
