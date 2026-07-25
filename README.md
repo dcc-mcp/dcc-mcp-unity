@@ -5,12 +5,10 @@
 Unity Editor adapter for the DCC Model Context Protocol ecosystem. It ships a UPM Editor package,
 a loopback WebSocket bridge, and typed project, scene, build, and diagnostic tools.
 
-The supported Editor range starts at Unity 2018.4.25f1 with the .NET 4.x Equivalent scripting
-runtime. CI pins that Unity 2018 baseline, the 2021.3 baseline, and the current stable Unity 6
-release instead of using a drifting `latest` tag.
-
-The first-release boundary and comparison with `unity-cli` and two established Unity MCP projects
-are documented in the [architecture benchmark](https://github.com/dcc-mcp/dcc-mcp-unity/blob/main/docs/architecture-benchmark.md).
+The adapter supports all Unity Editor versions from Unity 2018.4.25f1 onwards, covering every
+2018–2024 LTS release and Unity 6. CI pins the 2018 baseline, the 2021.3 baseline, and the
+current stable Unity 6 release instead of using a drifting `latest` tag. The .NET 4.x Equivalent
+scripting runtime is required when using Unity 2018.4.
 
 ## Install
 
@@ -107,6 +105,18 @@ accepts only the methods implemented in `DccMcpCommands` and executes them on Un
 loop. One persistent mutating job runs at a time. Mutations fail closed in incompatible Editor
 states. Requests, queued work, source text, scene snapshots, Console reads, and serialized responses
 have explicit size or lifetime budgets.
+
+## Tuanjie Engine
+
+团结引擎 (Tuanjie Engine) is Unity China's localized distribution of Unity, tailored for the
+Chinese market with additional platform support and AI capabilities. DCC-MCP Unity detects and
+works with both standard Unity Editor builds and Tuanjie Engine builds without separate
+deployment — no additional configuration is needed.
+
+When Tuanjie's optional AI packages are installed in the project, the `unity-tuanjie-ai` tool
+set becomes available. It exposes the native CustomTool catalog so agents can inspect available
+tools, submit requests, and query results through Tuanjie's Codely platform. Sign-in, credits,
+downloads, and task recovery remain owned by the Tuanjie runtime.
 
 ## Validation boundary
 
