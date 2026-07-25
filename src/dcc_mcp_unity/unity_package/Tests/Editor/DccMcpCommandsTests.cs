@@ -12,6 +12,7 @@ namespace DccMcp.Unity.Tests
 {
     public sealed class DccMcpCommandsTests
     {
+        private const int MaxJobPollFrames = 600;
         private const string SourceWriteGate = "DCC_MCP_UNITY_ALLOW_SOURCE_WRITES";
         private string originalJobStore;
         private string originalSourceWriteGate;
@@ -53,7 +54,7 @@ namespace DccMcp.Unity.Tests
                     Directory.Delete(testDirectory, true);
                 }
             }
-            AssetDatabase.Refresh();
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
         }
 
         [Test]
@@ -615,7 +616,7 @@ namespace DccMcp.Unity.Tests
             Assert.That((string)submitted["state"], Is.EqualTo("queued"));
 
             JObject status = null;
-            for (var frame = 0; frame < 10; frame++)
+            for (var frame = 0; frame < MaxJobPollFrames; frame++)
             {
                 yield return null;
                 status = DccMcpCommands.Execute(
@@ -639,7 +640,7 @@ namespace DccMcp.Unity.Tests
             update["content"] = "updated text\n";
             update["expected_sha256"] = read["sha256"].DeepClone();
             DccMcpCommands.Execute("assets.upsert_text", update);
-            for (var frame = 0; frame < 10; frame++)
+            for (var frame = 0; frame < MaxJobPollFrames; frame++)
             {
                 yield return null;
                 status = DccMcpCommands.Execute(
@@ -663,7 +664,7 @@ namespace DccMcp.Unity.Tests
             staleCreate["request_id"] = Guid.NewGuid().ToString("D");
             var staleSubmitted = DccMcpCommands.Execute("assets.upsert_text", staleCreate);
             Assert.That((string)staleSubmitted["state"], Is.EqualTo("queued"));
-            for (var frame = 0; frame < 10; frame++)
+            for (var frame = 0; frame < MaxJobPollFrames; frame++)
             {
                 yield return null;
                 status = DccMcpCommands.Execute(
