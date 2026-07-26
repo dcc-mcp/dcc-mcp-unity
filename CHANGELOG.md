@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.2](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.11.1...v0.11.2) (2026-07-26)
+
+
+### Bug Fixes
+
+* preserve readiness during Unity domain reloads ([#54](https://github.com/dcc-mcp/dcc-mcp-unity/issues/54)) ([197de76](https://github.com/dcc-mcp/dcc-mcp-unity/commit/197de7624e1bff1a5d6a37a76734e3c7e7b79a43))
+
 ## [0.11.1](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.11.0...v0.11.1) (2026-07-26)
 
 
