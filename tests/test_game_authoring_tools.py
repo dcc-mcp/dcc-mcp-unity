@@ -5,9 +5,11 @@ from pathlib import Path
 
 import pytest
 import yaml
+from dcc_mcp_core import DeferredToolResult
 from dcc_mcp_core.skill import skill_error
 from jsonschema import Draft7Validator
 
+import dcc_mcp_unity.job_result as job_results
 from dcc_mcp_unity.job_result import job_state_result
 
 ROOT = Path(__file__).parents[1]
@@ -95,7 +97,17 @@ def test_game_authoring_wrappers_forward_only_typed_arguments(
 
     result = module.main(**arguments, ignored_core_metadata=True)
 
-    assert result["success"] is True
+    if name in {
+        "upsert_text_asset",
+        "refresh_and_compile",
+        "set_play_mode",
+        "build_windows_player",
+        "run_tests",
+        "capture_game_view",
+    }:
+        assert isinstance(result, DeferredToolResult)
+    else:
+        assert result["success"] is True
     assert calls == [(method, arguments)]
 
 
@@ -213,6 +225,9 @@ def test_job_tool_schemas_publish_states_and_accept_the_standard_error_envelope(
             "failed",
         ]
         assert tool["annotations"]["deferred_hint"] is False
+        if tool["name"] != "inspect_job":
+            assert tool["execution"] == "async"
+            assert tool["timeout_hint_secs"] == 3600
 
 
 def test_utf8_text_limit_fits_the_bridge_after_worst_case_json_escaping(monkeypatch):
@@ -259,9 +274,40 @@ def test_invalid_host_job_state_uses_schema_safe_error_context():
     assert result["context"]["returned_state"] == "complete"
 
 
+def test_running_host_job_defers_until_unity_reports_terminal_state(monkeypatch):
+    snapshots = iter(
+        [
+            {"state": "running", "phase": "tests"},
+            {"state": "succeeded", "phase": "complete", "result": {"passed": 1}},
+        ]
+    )
+    monkeypatch.setattr(
+        job_results,
+        "call_host",
+        lambda *_args, **_kwargs: next(snapshots),
+        raising=False,
+    )
+
+    deferred = job_state_result(
+        "Unity Test Runner",
+        {
+            "request_id": "778e72dd-e536-4ff8-aad0-9b752ab61c3b",
+            "state": "queued",
+            "phase": "queued",
+        },
+    )
+
+    assert isinstance(deferred, DeferredToolResult)
+    assert deferred.check_is_finished() is None
+    result = deferred.check_is_finished()
+    assert result["success"] is True
+    assert result["context"]["state"] == "succeeded"
+    assert result["context"]["result"] == {"passed": 1}
+
+
 @pytest.mark.parametrize(
     ("state", "expected_success"),
-    [("queued", True), ("succeeded", True), ("failed", False)],
+    [("succeeded", True), ("failed", False)],
 )
 def test_submit_wrapper_preserves_terminal_job_state(monkeypatch, state, expected_success):
     module = _load_script("unity-project", "upsert_text_asset")

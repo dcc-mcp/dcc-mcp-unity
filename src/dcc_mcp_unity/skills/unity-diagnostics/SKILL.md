@@ -5,7 +5,7 @@ description: >-
   and capture a Play-Mode Game View PNG. Use for compile, build, and gameplay
   verification. Not for clearing logs or arbitrary Editor access.
 license: MIT
-compatibility: "Unity 2018.4.25f1+ (.NET 4.x); dcc-mcp-core 0.19.45+"
+compatibility: "Unity 2018.4.25f1+ (.NET 4.x); dcc-mcp-core 0.19.49+"
 allowed-tools: "python"
 metadata:
   dcc-mcp:
@@ -23,7 +23,8 @@ metadata:
 Read the captured Unity Console after an operation or when the Editor reports a failure. Results
 are bounded and may be truncated; increase `limit` up to 200 or narrow by severity when needed.
 
-Poll `inspect_job` with the exact UUID used to submit a mutation. Treat `failed` as terminal and do
-not replace an ambiguous queued/running request with a new ID. `capture_game_view` is accepted only
-in active, unpaused Play Mode, focuses Game View, waits a rendered frame, and succeeds only after
-Unity decodes a bounded nonzero PNG in its fixed output directory.
+Persistent operations keep their Core async job open until Unity reports `succeeded` or `failed`;
+wait on that job instead of replacing an ambiguous request with a new UUID. `inspect_job` remains
+available for reconnect and audit recovery. `capture_game_view` is accepted only in active,
+unpaused Play Mode, focuses Game View, waits a rendered frame, and succeeds only after Unity
+decodes a bounded nonzero PNG in its fixed output directory.

@@ -5,7 +5,7 @@ description: >-
   upsert bounded source assets, run typed Unity tests, change Play Mode, and build a Windows player.
   Not for GameObject edits — use unity-scene.
 license: MIT
-compatibility: "Unity 2018.4.25f1+ (.NET 4.x); dcc-mcp-core 0.19.45+"
+compatibility: "Unity 2018.4.25f1+ (.NET 4.x); dcc-mcp-core 0.19.49+"
 allowed-tools: "python"
 metadata:
   dcc-mcp:
@@ -25,11 +25,14 @@ writes require the operator-owned environment gate, an `Assets/...` allowlisted 
 UTF-8 content, and either `expected_sha256: absent` for creation or the digest returned by
 `read_text_asset` for replacement.
 
-Every long or domain-reloading mutation returns a persistent job snapshot. Reuse the same UUID and
-poll `unity_diagnostics__inspect_job`; never retry an ambiguous result with a new request ID. Build
-uses only enabled scenes and writes a new request directory below `Builds/DccMcp`.
+Every long or domain-reloading mutation keeps its Core async job open until Unity reports a
+terminal persistent state. Reuse the same UUID and wait on that job; use
+`unity_diagnostics__inspect_job` for reconnect or audit recovery, and never replace an ambiguous
+request with a new ID. Build uses only enabled scenes and writes a new request directory below
+`Builds/DccMcp`.
 
 `run_tests` invokes the installed Unity Test Framework through an exact typed contract. Use
 `edit_mode` or `play_mode` and optional exact fully-qualified test or fixture names; an empty list
-runs the selected mode. Poll the returned job and treat `result.outcome`, counts, report SHA-256,
-and request-scoped NUnit XML as the test evidence. The tool never launches another Unity process.
+runs the selected mode. Wait for the returned Core job and treat `result.outcome`, counts, report
+SHA-256, and request-scoped NUnit XML as the test evidence. The tool never launches another Unity
+process.
