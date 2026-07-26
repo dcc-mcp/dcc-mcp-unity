@@ -36,6 +36,9 @@ namespace DccMcp.Unity
                     case "assets.refresh":
                         result = RefreshAssets();
                         break;
+                    case "assets.configure_sprite":
+                        result = ConfigureSpriteImporter(parameters);
+                        break;
                     case "assets.read_text":
                         result = DccMcpJobs.ReadTextAsset(parameters);
                         break;
@@ -100,6 +103,7 @@ namespace DccMcp.Unity
         private static void EnsureEditorReady(string method)
         {
             var mutating = method == "assets.refresh"
+                || method == "assets.configure_sprite"
                 || method == "scene.create_game_object"
                 || method == "scene.set_transform"
                 || method == "scene.save"
@@ -153,6 +157,65 @@ namespace DccMcp.Unity
         {
             AssetDatabase.Refresh();
             return new JObject { ["refreshed"] = true };
+        }
+
+        private static JObject ConfigureSpriteImporter(JObject parameters)
+        {
+            var path = RequirePngAssetPath(parameters);
+            DccMcpJobs.EnsureProjectAssetPathSafe(path);
+            var pixelsPerUnit = ReadOptionalInt(parameters, "pixels_per_unit", 100);
+            if (pixelsPerUnit < 1 || pixelsPerUnit > 10000)
+            {
+                throw new InvalidOperationException(
+                    "pixels_per_unit must be between 1 and 10000.");
+            }
+
+            var filterName = (string)parameters["filter_mode"] ?? "bilinear";
+            FilterMode filterMode;
+            if (filterName == "point")
+            {
+                filterMode = FilterMode.Point;
+            }
+            else if (filterName == "bilinear")
+            {
+                filterMode = FilterMode.Bilinear;
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    "filter_mode must be point or bilinear.");
+            }
+
+            AssetDatabase.ImportAsset(
+                path,
+                ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
+            var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (importer == null)
+            {
+                throw new InvalidOperationException(
+                    "PNG texture asset is unavailable or could not be imported: " + path);
+            }
+
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.spritePixelsPerUnit = pixelsPerUnit;
+            importer.mipmapEnabled = false;
+            importer.alphaIsTransparency = true;
+            importer.wrapMode = TextureWrapMode.Clamp;
+            importer.filterMode = filterMode;
+            importer.SaveAndReimport();
+
+            return new JObject
+            {
+                ["configured"] = true,
+                ["path"] = path,
+                ["guid"] = AssetDatabase.AssetPathToGUID(path),
+                ["pixels_per_unit"] = pixelsPerUnit,
+                ["filter_mode"] = filterName,
+                ["mipmaps"] = false,
+                ["alpha_is_transparency"] = true,
+                ["wrap_mode"] = "clamp",
+            };
         }
 
         private static JObject InspectScene(JObject parameters)
@@ -343,6 +406,32 @@ namespace DccMcp.Unity
                 throw new InvalidOperationException(name + " must be at most 120 characters.");
             }
             return value;
+        }
+
+        private static string RequirePngAssetPath(JObject parameters)
+        {
+            var path = (string)parameters["path"];
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                throw new InvalidOperationException("path is required.");
+            }
+            if (path.Length > 512
+                || !path.StartsWith("Assets/", StringComparison.Ordinal)
+                || !path.EndsWith(".png", StringComparison.Ordinal)
+                || path.IndexOf('\\') >= 0)
+            {
+                throw new InvalidOperationException(
+                    "path must be a lowercase .png asset below Assets using forward slashes.");
+            }
+            foreach (var segment in path.Split('/'))
+            {
+                if (string.IsNullOrEmpty(segment) || segment == "." || segment == "..")
+                {
+                    throw new InvalidOperationException(
+                        "path must not contain empty, current, or parent segments.");
+                }
+            }
+            return path;
         }
 
         private static int RequireInt(JObject parameters, string name)

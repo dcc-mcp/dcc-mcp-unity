@@ -162,6 +162,70 @@ namespace DccMcp.Unity.Tests
         }
 
         [Test]
+        public void ConfigureSpriteImporterUsesTypedProjectScopedSettings()
+        {
+            const string assetPath = "Assets/DccMcpJobTests/FrostSpear.png";
+            var directory = Path.Combine(Application.dataPath, "DccMcpJobTests");
+            Directory.CreateDirectory(directory);
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            texture.SetPixels(new[] { Color.clear, Color.white, Color.white, Color.clear });
+            texture.Apply();
+            File.WriteAllBytes(Path.Combine(directory, "FrostSpear.png"), texture.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(texture);
+
+            var result = DccMcpCommands.Execute(
+                "assets.configure_sprite",
+                new JObject
+                {
+                    ["path"] = assetPath,
+                    ["pixels_per_unit"] = 128,
+                    ["filter_mode"] = "point",
+                });
+
+            var importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+            Assert.That(importer, Is.Not.Null);
+            Assert.That(importer.textureType, Is.EqualTo(TextureImporterType.Sprite));
+            Assert.That(importer.spriteImportMode, Is.EqualTo(SpriteImportMode.Single));
+            Assert.That(importer.spritePixelsPerUnit, Is.EqualTo(128));
+            Assert.That(importer.mipmapEnabled, Is.False);
+            Assert.That(importer.alphaIsTransparency, Is.True);
+            Assert.That(importer.wrapMode, Is.EqualTo(TextureWrapMode.Clamp));
+            Assert.That(importer.filterMode, Is.EqualTo(FilterMode.Point));
+            Assert.That((bool)result["configured"], Is.True);
+            Assert.That((string)result["path"], Is.EqualTo(assetPath));
+            Assert.That((string)result["filter_mode"], Is.EqualTo("point"));
+
+            Assert.That(
+                () => DccMcpCommands.Execute(
+                    "assets.configure_sprite",
+                    new JObject { ["path"] = "Assets/../ProjectSettings/icon.png" }),
+                Throws.TypeOf<InvalidOperationException>());
+            Assert.That(
+                () => DccMcpCommands.Execute(
+                    "assets.configure_sprite",
+                    new JObject { ["path"] = "Assets/DccMcpJobTests/Probe.jpg" }),
+                Throws.TypeOf<InvalidOperationException>());
+            Assert.That(
+                () => DccMcpCommands.Execute(
+                    "assets.configure_sprite",
+                    new JObject
+                    {
+                        ["path"] = assetPath,
+                        ["pixels_per_unit"] = 0,
+                    }),
+                Throws.TypeOf<InvalidOperationException>());
+            Assert.That(
+                () => DccMcpCommands.Execute(
+                    "assets.configure_sprite",
+                    new JObject
+                    {
+                        ["path"] = assetPath,
+                        ["filter_mode"] = "trilinear",
+                    }),
+                Throws.TypeOf<InvalidOperationException>());
+        }
+
+        [Test]
         public void JobSubmissionRejectsUnknownInputsUtf8OverflowAndConcurrency()
         {
             Environment.SetEnvironmentVariable(SourceWriteGate, "1");

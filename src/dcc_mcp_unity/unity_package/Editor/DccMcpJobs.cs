@@ -978,6 +978,17 @@ namespace DccMcp.Unity
                 throw new InvalidOperationException("Unsupported Unity text asset extension: " + extension);
             }
 
+            return ResolveProjectAssetPath(normalized);
+        }
+
+        internal static void EnsureProjectAssetPathSafe(string relativePath)
+        {
+            var fullPath = ResolveProjectAssetPath(NormalizeAssetPath(relativePath));
+            EnsureNoReparsePoints(fullPath);
+        }
+
+        private static string ResolveProjectAssetPath(string normalized)
+        {
             var projectPath = Path.GetDirectoryName(Application.dataPath) ?? string.Empty;
             var fullPath = Path.GetFullPath(Path.Combine(
                 projectPath,
@@ -990,7 +1001,7 @@ namespace DccMcp.Unity
                 : StringComparison.Ordinal;
             if (!fullPath.StartsWith(assetsRoot, comparison))
             {
-                throw new InvalidOperationException("Unity text asset path must stay below Assets.");
+                throw new InvalidOperationException("Unity asset path must stay below Assets.");
             }
             return fullPath;
         }
