@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.1](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.11.0...v0.11.1) (2026-07-26)
+
+
+### Bug Fixes
+
+* retry transient missing Unity jobs ([decae9c](https://github.com/dcc-mcp/dcc-mcp-unity/commit/decae9c57ee926351be5cc299a34c81f39b18271))
+* retry transient missing Unity jobs ([8cab8dd](https://github.com/dcc-mcp/dcc-mcp-unity/commit/8cab8dd6a188fc24f7951b190166b90a365ff4f2))
+
 ## [0.11.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.10.1...v0.11.0) (2026-07-26)
 
 
