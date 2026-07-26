@@ -12,7 +12,7 @@ metadata:
   dcc-mcp:
     dcc: unity
     layer: domain
-    version: "0.10.1"  # x-release-please-version
+    version: "0.11.0"  # x-release-please-version
     search-hint: "Tuanjie AI generate image sprite 3D material audio video terrain"
     tags: "unity,tuanjie,ai,assets,generation,game-development"
     tools: tools.yaml

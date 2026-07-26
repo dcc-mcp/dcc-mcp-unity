@@ -12,7 +12,7 @@ metadata:
   dcc-mcp:
     dcc: unity
     layer: domain
-    version: "0.10.1"  # x-release-please-version
+    version: "0.11.0"  # x-release-please-version
     search-hint: "Unity project source script sprite PNG TextureImporter CAS compile Play Mode Windows player build"
     tags: "unity,project,assets,game-development"
     tools: tools.yaml
