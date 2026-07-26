@@ -1,7 +1,7 @@
 from typing import Any
 
 from dcc_mcp_core import DeferredToolResult
-from dcc_mcp_core.bridge import BridgeConnectionError, BridgeTimeoutError
+from dcc_mcp_core.bridge import BridgeConnectionError, BridgeRpcError, BridgeTimeoutError
 from dcc_mcp_core.skill import skill_error, skill_success
 
 from dcc_mcp_unity.bridge import call_host
@@ -26,6 +26,14 @@ def job_state_result(action: str, result: dict[str, Any]):
                 snapshot = call_host("jobs.inspect", {"request_id": request_id})
             except (BridgeConnectionError, BridgeTimeoutError):
                 return None
+            except BridgeRpcError as exception:
+                if (
+                    exception.code == -32000
+                    and exception.message
+                    == f"Unity job was not found for request_id: {request_id}"
+                ):
+                    return None
+                raise
             if snapshot.get("state") in {"queued", "running"}:
                 return None
             return job_state_result(action, snapshot)

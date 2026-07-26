@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 from dcc_mcp_core import DeferredToolResult
+from dcc_mcp_core.bridge import BridgeRpcError
 from dcc_mcp_core.skill import skill_error
 from jsonschema import Draft7Validator
 
@@ -304,14 +305,26 @@ def test_invalid_host_job_state_uses_schema_safe_error_context():
 def test_running_host_job_defers_until_unity_reports_terminal_state(monkeypatch):
     snapshots = iter(
         [
+            BridgeRpcError(
+                -32000,
+                "Unity job was not found for request_id: "
+                "778e72dd-e536-4ff8-aad0-9b752ab61c3b",
+            ),
             {"state": "running", "phase": "tests"},
             {"state": "succeeded", "phase": "complete", "result": {"passed": 1}},
         ]
     )
+
+    def inspect_job(*_args, **_kwargs):
+        snapshot = next(snapshots)
+        if isinstance(snapshot, Exception):
+            raise snapshot
+        return snapshot
+
     monkeypatch.setattr(
         job_results,
         "call_host",
-        lambda *_args, **_kwargs: next(snapshots),
+        inspect_job,
         raising=False,
     )
 
@@ -325,6 +338,7 @@ def test_running_host_job_defers_until_unity_reports_terminal_state(monkeypatch)
     )
 
     assert isinstance(deferred, DeferredToolResult)
+    assert deferred.check_is_finished() is None
     assert deferred.check_is_finished() is None
     result = deferred.check_is_finished()
     assert result["success"] is True
