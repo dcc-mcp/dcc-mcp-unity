@@ -56,7 +56,7 @@ tools:
       on-success: [unity_project__upsert_text_asset]
       on-failure: [unity_diagnostics__read_console, dcc_diagnostics__audit_log]
   - name: upsert_text_asset
-    description: Queue an atomic CAS-protected UTF-8 source write below Assets. Requires the operator-owned DCC_MCP_UNITY_ALLOW_SOURCE_WRITES=1 environment gate; expected_sha256 is absent for create or the current lowercase digest for update. The call returns queued, running, succeeded, or failed job state, never synthetic completion.
+    description: Queue an atomic CAS-protected UTF-8 source write below Assets. Requires the operator-owned DCC_MCP_UNITY_ALLOW_SOURCE_WRITES=1 environment gate; expected_sha256 is absent for create or the current lowercase digest for update. The Core job remains open until Unity reports succeeded or failed, never synthetic completion.
     input_schema:
       type: object
       required: [request_id, path, content, expected_sha256]
@@ -98,10 +98,10 @@ tools:
             properties:
               context:
                 required: [state, phase]
-    execution: sync
+    execution: async
     affinity: main
     enforce_thread_affinity: true
-    timeout_hint_secs: 60
+    timeout_hint_secs: 3600
     annotations:
       read_only_hint: false
       destructive_hint: true
@@ -113,7 +113,7 @@ tools:
       on-success: [unity_diagnostics__inspect_job]
       on-failure: [unity_diagnostics__read_console, dcc_diagnostics__audit_log]
   - name: refresh_and_compile
-    description: Queue AssetDatabase refresh and wait across domain reload until Unity becomes idle, reporting script compilation failure instead of claiming synchronous completion. Poll inspect_job with the same request_id.
+    description: Queue AssetDatabase refresh and keep the Core job open across domain reload until Unity becomes idle, reporting script compilation failure instead of claiming completion early. Use inspect_job with the same request_id only for reconnect or audit recovery.
     input_schema:
       type: object
       required: [request_id]
@@ -144,10 +144,10 @@ tools:
             properties:
               context:
                 required: [state, phase]
-    execution: sync
+    execution: async
     affinity: main
     enforce_thread_affinity: true
-    timeout_hint_secs: 60
+    timeout_hint_secs: 3600
     annotations:
       read_only_hint: false
       destructive_hint: false
@@ -159,7 +159,7 @@ tools:
       on-success: [unity_diagnostics__inspect_job]
       on-failure: [unity_diagnostics__read_console, dcc_diagnostics__audit_log]
   - name: set_play_mode
-    description: Queue entry to or exit from Play Mode and persist status across domain reload. Poll inspect_job with the same request_id; use true to play and false to return to Edit Mode.
+    description: Queue entry to or exit from Play Mode, persist status across domain reload, and keep the Core job open until Unity observes the requested state. Use inspect_job with the same request_id only for reconnect or audit recovery; use true to play and false to return to Edit Mode.
     input_schema:
       type: object
       required: [request_id, play]
@@ -191,10 +191,10 @@ tools:
             properties:
               context:
                 required: [state, phase]
-    execution: sync
+    execution: async
     affinity: main
     enforce_thread_affinity: true
-    timeout_hint_secs: 60
+    timeout_hint_secs: 3600
     annotations:
       read_only_hint: false
       destructive_hint: true
@@ -206,7 +206,7 @@ tools:
       on-success: [unity_diagnostics__inspect_job]
       on-failure: [unity_diagnostics__read_console, dcc_diagnostics__audit_log]
   - name: build_windows_player
-    description: Queue a Windows x64 player build from exactly the enabled saved EditorBuildSettings scenes into a new request-specific directory below Builds/DccMcp. The job persistently switches the active target when needed and rejects dirty enabled scenes; poll inspect_job and note that existing outputs are never overwritten.
+    description: Queue a Windows x64 player build from exactly the enabled saved EditorBuildSettings scenes into a new request-specific directory below Builds/DccMcp. The Core job remains open while Unity persistently switches the active target when needed; dirty enabled scenes are rejected and existing outputs are never overwritten.
     input_schema:
       type: object
       required: [request_id]
@@ -237,10 +237,10 @@ tools:
             properties:
               context:
                 required: [state, phase]
-    execution: sync
+    execution: async
     affinity: main
     enforce_thread_affinity: true
-    timeout_hint_secs: 60
+    timeout_hint_secs: 3600
     annotations:
       read_only_hint: false
       destructive_hint: true
@@ -252,7 +252,7 @@ tools:
       on-success: [unity_diagnostics__inspect_job]
       on-failure: [unity_diagnostics__read_console, dcc_diagnostics__audit_log]
   - name: run_tests
-    description: Queue the installed Unity Test Framework in EditMode or PlayMode and write request-scoped NUnit XML below Builds/DccMcp/Tests. Optional test_names are exact fully-qualified test or fixture names; at most 128 are accepted. Poll inspect_job and verify result.outcome and counts; zero matched tests fail closed. This does not launch a second Unity process or accept command-line arguments.
+    description: Queue the installed Unity Test Framework in EditMode or PlayMode, keep the Core job open until completion, and write request-scoped NUnit XML below Builds/DccMcp/Tests. Optional test_names are exact fully-qualified test or fixture names; at most 128 are accepted. Verify result.outcome and counts; zero matched tests fail closed. This does not launch a second Unity process or accept command-line arguments.
     input_schema:
       type: object
       required: [request_id, test_mode]
@@ -296,10 +296,10 @@ tools:
             properties:
               context:
                 required: [state, phase]
-    execution: sync
+    execution: async
     affinity: main
     enforce_thread_affinity: true
-    timeout_hint_secs: 60
+    timeout_hint_secs: 3600
     annotations:
       read_only_hint: false
       destructive_hint: false
