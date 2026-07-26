@@ -29,8 +29,7 @@ def job_state_result(action: str, result: dict[str, Any]):
             except BridgeRpcError as exception:
                 if (
                     exception.code == -32000
-                    and exception.message
-                    == f"Unity job was not found for request_id: {request_id}"
+                    and exception.message == f"Unity job was not found for request_id: {request_id}"
                 ):
                     return None
                 raise

@@ -307,8 +307,7 @@ def test_running_host_job_defers_until_unity_reports_terminal_state(monkeypatch)
         [
             BridgeRpcError(
                 -32000,
-                "Unity job was not found for request_id: "
-                "778e72dd-e536-4ff8-aad0-9b752ab61c3b",
+                "Unity job was not found for request_id: 778e72dd-e536-4ff8-aad0-9b752ab61c3b",
             ),
             {"state": "running", "phase": "tests"},
             {"state": "succeeded", "phase": "complete", "result": {"passed": 1}},
