@@ -718,16 +718,40 @@ namespace DccMcp.Unity.Tests
         [Test]
         public void TuanjieAiUsesTheNativeCustomToolRegistry()
         {
-            CollectionAssert.AreEqual(
-                new[] { "official_tool", "third_party_tool" },
-                DccMcpTuanjieAi.DiscoverRegisteredToolNames(typeof(FakeTuanjieBridge)));
+            var names = DccMcpTuanjieAi.DiscoverRegisteredToolNames(typeof(FakeTuanjieBridge));
+            CollectionAssert.AreEqual(new[] { "official_tool", "third_party_tool" }, names);
+
+            var descriptions = DccMcpTuanjieAi.DiscoverRegisteredToolDescriptions(
+                typeof(FakeTuanjieBridge),
+                names);
+            Assert.That((string)descriptions["official_tool"], Is.EqualTo("Official tool guidance"));
+            Assert.That(descriptions["third_party_tool"].Type, Is.EqualTo(JTokenType.Null));
         }
 
         private static class FakeTuanjieBridge
         {
+            [AttributeUsage(AttributeTargets.Method)]
+            public sealed class CustomToolAttribute : Attribute
+            {
+                public string Name { get; }
+                public string Description { get; }
+
+                public CustomToolAttribute(string name, string description = null)
+                {
+                    Name = name;
+                    Description = description;
+                }
+            }
+
             public static string[] GetRegisteredTools()
             {
                 return new[] { "third_party_tool", "official_tool" };
+            }
+
+            [CustomTool("official_tool", "Official tool guidance")]
+            public static object OfficialTool(JObject parameters)
+            {
+                return parameters;
             }
         }
 

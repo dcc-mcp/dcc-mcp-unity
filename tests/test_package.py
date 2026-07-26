@@ -353,6 +353,8 @@ def test_tuanjie_ai_skill_reuses_optional_native_custom_tools():
     assert "UnityTcp.CustomTool" in host
     assert "ExecuteCustomTool" in host
     assert "GetRegisteredTools" in host
+    assert '"tool_descriptions"' in host
+    assert "CustomToolAttribute" in host
     assert "System.Net" not in host
     assert 'case "tuanjie_ai.inspect"' in commands
     assert 'case "tuanjie_ai.execute"' in commands

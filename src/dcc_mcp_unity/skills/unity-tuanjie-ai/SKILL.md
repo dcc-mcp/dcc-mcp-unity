@@ -21,11 +21,13 @@ metadata:
 
 # Tuanjie AI
 
-Call `inspect_tuanjie_ai` first and execute only a tool name returned by that fresh result. The
-adapter delegates to the installed Tuanjie package; it does not copy its HTTP client, credentials,
-credit rules, downloads, or recovery logic. Tuanjie/Codely sign-in and sufficient credits remain
-host prerequisites. The official `cn.tuanjie.ai.generators` package is optional: other plugins can
-extend this Skill by registering valid tools with the bridge's native `CustomTool` contract.
+Call `inspect_tuanjie_ai` first and execute only a tool name returned by that fresh result. Read its
+`tool_descriptions` entry for provider-owned parameter, default, and recovery guidance; a null entry
+means that a manually registered tool did not publish a native description. The adapter delegates
+to the installed Tuanjie package; it does not copy its HTTP client, credentials, credit rules,
+downloads, or recovery logic. Tuanjie/Codely sign-in and sufficient credits remain host
+prerequisites. The official `cn.tuanjie.ai.generators` package is optional: other plugins can extend
+this Skill by registering valid tools with the bridge's native `CustomTool` contract.
 
 Generation can spend credits and import or replace project assets. Pass the current agent session
 identifier when the native tool supports `session_id`, then poll with the matching native status tool.

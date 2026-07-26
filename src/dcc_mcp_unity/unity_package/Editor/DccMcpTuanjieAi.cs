@@ -23,6 +23,9 @@ namespace DccMcp.Unity
                 ["bridge_available"] = bridgeType != null,
                 ["generator_package_loaded"] = toolAssembly != null,
                 ["tools"] = new JArray(toolNames),
+                ["tool_descriptions"] = DiscoverRegisteredToolDescriptions(
+                    bridgeType,
+                    toolNames),
             };
         }
 
@@ -163,6 +166,84 @@ namespace DccMcp.Unity
                     .Distinct(StringComparer.Ordinal)
                     .OrderBy(name => name, StringComparer.Ordinal)
                     .ToArray();
+        }
+
+        internal static JObject DiscoverRegisteredToolDescriptions(
+            Type bridgeType,
+            IEnumerable<string> toolNames)
+        {
+            var descriptions = new JObject();
+            foreach (var name in toolNames ?? new string[0])
+            {
+                descriptions[name] = JValue.CreateNull();
+            }
+
+            var attributeType = bridgeType?.GetNestedType(
+                "CustomToolAttribute",
+                BindingFlags.Public);
+            var nameProperty = attributeType?.GetProperty(
+                "Name",
+                BindingFlags.Public | BindingFlags.Instance);
+            var descriptionProperty = attributeType?.GetProperty(
+                "Description",
+                BindingFlags.Public | BindingFlags.Instance);
+            if (attributeType == null || nameProperty == null || descriptionProperty == null)
+            {
+                return descriptions;
+            }
+
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var assemblyName = assembly.GetName().Name;
+                if (!assemblyName.StartsWith("UnityTcp", StringComparison.Ordinal)
+                    && (assemblyName.StartsWith("System", StringComparison.Ordinal)
+                        || assemblyName.StartsWith("mscorlib", StringComparison.Ordinal)
+                        || assemblyName.StartsWith("Unity", StringComparison.Ordinal)
+                        || assemblyName.StartsWith("Newtonsoft", StringComparison.Ordinal)
+                        || assemblyName.StartsWith("netstandard", StringComparison.Ordinal)
+                        || assemblyName.StartsWith("Microsoft", StringComparison.Ordinal)))
+                {
+                    continue;
+                }
+
+                Type[] types;
+                try
+                {
+                    types = assembly.GetTypes();
+                }
+                catch (ReflectionTypeLoadException exception)
+                {
+                    types = exception.Types.Where(type => type != null).ToArray();
+                }
+                catch
+                {
+                    continue;
+                }
+
+                foreach (var type in types)
+                {
+                    foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static))
+                    {
+                        var attribute = method
+                            .GetCustomAttributes(attributeType, false)
+                            .FirstOrDefault();
+                        var name = attribute == null
+                            ? null
+                            : nameProperty.GetValue(attribute, null) as string;
+                        if (string.IsNullOrWhiteSpace(name) || descriptions.Property(name) == null)
+                        {
+                            continue;
+                        }
+
+                        var description = descriptionProperty.GetValue(attribute, null) as string;
+                        if (!string.IsNullOrWhiteSpace(description))
+                        {
+                            descriptions[name] = description;
+                        }
+                    }
+                }
+            }
+            return descriptions;
         }
     }
 }

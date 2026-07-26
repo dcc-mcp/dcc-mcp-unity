@@ -1,6 +1,6 @@
 tools:
   - name: inspect_tuanjie_ai
-    description: Discover whether the optional Tuanjie Codely bridge and official generator package are loaded, and return every CustomTool in the bridge's native registry, including tools contributed by other plugins. Use immediately before choosing a native tool.
+    description: Discover whether the optional Tuanjie Codely bridge and official generator package are loaded, and return every CustomTool in the bridge's native registry, including tools contributed by other plugins. The tool_descriptions map preserves each provider's native parameter and recovery guidance when supplied. Use immediately before choosing a native tool.
     input_schema: {type: object, properties: {}, additionalProperties: false}
     output_schema: {type: object}
     read_only: true
