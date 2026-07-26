@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.11.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.10.1...v0.11.0) (2026-07-26)
+
+
+### Features
+
+* **project:** configure generated sprite imports safely ([394a0cb](https://github.com/dcc-mcp/dcc-mcp-unity/commit/394a0cb88fde008bbb50740c41a64d9c4adfac4a))
+* **project:** configure generated sprite imports safely ([fa37040](https://github.com/dcc-mcp/dcc-mcp-unity/commit/fa370406e54454b020c3f7282e9fea149749f79f))
+* **tuanjie:** expose native custom tool descriptions ([881ea58](https://github.com/dcc-mcp/dcc-mcp-unity/commit/881ea58f4105b1d1a7e26c19a0473db84d8e6336))
+* **tuanjie:** expose native custom tool descriptions ([47e5156](https://github.com/dcc-mcp/dcc-mcp-unity/commit/47e5156d22d30d5d3cebffc0879a9767a7ed4417))
+
 ## [0.10.1](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.10.0...v0.10.1) (2026-07-26)
 
 
