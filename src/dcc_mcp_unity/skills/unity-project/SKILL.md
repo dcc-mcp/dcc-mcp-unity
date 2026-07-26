@@ -2,8 +2,9 @@
 name: unity-project
 description: >-
   Domain skill — Inspect and compile an open Unity project, read or safely
-  upsert bounded source assets, run typed Unity tests, change Play Mode, and build a Windows player.
-  Not for GameObject edits — use unity-scene.
+  upsert bounded source assets, configure generated PNG sprites, run typed Unity
+  tests, change Play Mode, and build a Windows player. Not for GameObject edits
+  — use unity-scene.
 license: MIT
 compatibility: "Unity 2018.4.25f1+ (.NET 4.x); dcc-mcp-core 0.19.49+"
 allowed-tools: "python"
@@ -12,7 +13,7 @@ metadata:
     dcc: unity
     layer: domain
     version: "0.10.1"  # x-release-please-version
-    search-hint: "Unity project source script CAS compile Play Mode Windows player build"
+    search-hint: "Unity project source script sprite PNG TextureImporter CAS compile Play Mode Windows player build"
     tags: "unity,project,assets,game-development"
     tools: tools.yaml
     depends: "dcc-diagnostics"
@@ -20,10 +21,12 @@ metadata:
 
 # Unity Project
 
-Inspect before assuming the active project, scene, Unity version, or Play/compile state. Source
-writes require the operator-owned environment gate, an `Assets/...` allowlisted text path, bounded
-UTF-8 content, and either `expected_sha256: absent` for creation or the digest returned by
-`read_text_asset` for replacement.
+Inspect before assuming the active project, scene, Unity version, or Play/compile state.
+`configure_sprite_importer` imports one existing `Assets/.../*.png` as a single Sprite through
+Unity's native `TextureImporter`; choose point or bilinear filtering and an explicit pixels-per-unit
+value. Source writes require the operator-owned environment gate, an `Assets/...` allowlisted text
+path, bounded UTF-8 content, and either `expected_sha256: absent` for creation or the digest returned
+by `read_text_asset` for replacement.
 
 Every long or domain-reloading mutation keeps its Core async job open until Unity reports a
 terminal persistent state. Reuse the same UUID and wait on that job; use

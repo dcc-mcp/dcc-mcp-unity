@@ -31,6 +31,16 @@ def _load_script(skill: str, name: str):
         ("unity-project", "read_text_asset", "assets.read_text", {"path": "Assets/Game.cs"}),
         (
             "unity-project",
+            "configure_sprite_importer",
+            "assets.configure_sprite",
+            {
+                "path": "Assets/Art/Hero.png",
+                "pixels_per_unit": 128,
+                "filter_mode": "point",
+            },
+        ),
+        (
+            "unity-project",
             "upsert_text_asset",
             "assets.upsert_text",
             {
@@ -145,6 +155,7 @@ def test_game_authoring_manifests_declare_the_bounded_surface():
 
     for name in (
         "read_text_asset",
+        "configure_sprite_importer",
         "upsert_text_asset",
         "refresh_and_compile",
         "set_play_mode",
@@ -163,19 +174,35 @@ def test_game_authoring_manifests_declare_the_bounded_surface():
     assert "queued/running/completed" not in project
 
 
-def test_text_asset_schema_rejects_traversal_and_backslashes():
+def test_project_asset_schemas_reject_traversal_and_backslashes():
     manifest = yaml.safe_load((SKILLS / "unity-project" / "tools.yaml").read_text("utf-8"))
     tools = {tool["name"]: tool for tool in manifest["tools"]}
-    for name in ("read_text_asset", "upsert_text_asset"):
+    for name in ("read_text_asset", "upsert_text_asset", "configure_sprite_importer"):
         pattern = tools[name]["input_schema"]["properties"]["path"]["pattern"]
-        assert re.fullmatch(pattern, "Assets/Game/Scripts/Player.cs")
+        valid = (
+            "Assets/Art/Hero.png"
+            if name == "configure_sprite_importer"
+            else "Assets/Game/Scripts/Player.cs"
+        )
+        assert re.fullmatch(pattern, valid)
+        extension = "png" if name == "configure_sprite_importer" else "cs"
         for invalid in (
-            "Assets/../ProjectSettings/ProjectVersion.txt",
-            "Assets/./Player.cs",
-            r"Assets\Game\Player.cs",
-            "Assets/Game/../Player.cs",
+            f"Assets/../ProjectSettings/Probe.{extension}",
+            f"Assets/./Player.{extension}",
+            rf"Assets\Game\Player.{extension}",
+            f"Assets/Game/../Player.{extension}",
         ):
             assert re.fullmatch(pattern, invalid) is None
+
+
+def test_sprite_importer_reuses_the_project_reparse_boundary():
+    package = ROOT / "src" / "dcc_mcp_unity" / "unity_package"
+    commands = (package / "Editor" / "DccMcpCommands.cs").read_text(encoding="utf-8")
+    jobs = (package / "Editor" / "DccMcpJobs.cs").read_text(encoding="utf-8")
+
+    assert "DccMcpJobs.EnsureProjectAssetPathSafe(path);" in commands
+    assert "internal static void EnsureProjectAssetPathSafe" in jobs
+    assert "EnsureNoReparsePoints(fullPath);" in jobs
 
 
 def test_job_tool_schemas_publish_states_and_accept_the_standard_error_envelope():
