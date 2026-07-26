@@ -40,6 +40,7 @@ def test_server_readiness_monitor_tracks_unity_bridge_connection(monkeypatch):
 
     monkeypatch.setattr(server_module, "get_bridge", FakeBridge)
     monkeypatch.setattr(server_module, "_READINESS_POLL_SECONDS", 0.001)
+    monkeypatch.setattr(server_module, "_BRIDGE_DISCONNECT_GRACE_SECONDS", 0)
     server = UnityMcpServer(port=0)
     set_readiness = server._set_bridge_readiness
 
@@ -74,6 +75,35 @@ def test_server_readiness_monitor_tracks_unity_bridge_connection(monkeypatch):
         transitioned[False] = threading.Event()
         connected.clear()
         assert transitioned[False].wait(timeout=1.0)
+        assert server._readiness.report_subset()["dcc"] is False
+    finally:
+        server.stop()
+
+
+def test_server_readiness_graces_brief_bridge_disconnect(monkeypatch):
+    clock = [100.0]
+
+    class FakeBridge:
+        connected = True
+
+        def is_connected(self):
+            return self.connected
+
+    bridge = FakeBridge()
+    monkeypatch.setattr(server_module, "get_bridge", lambda: bridge)
+    monkeypatch.setattr(server_module.time, "monotonic", lambda: clock[0])
+    server = UnityMcpServer(port=0)
+    try:
+        assert server._sync_bridge_readiness() is True
+
+        bridge.connected = False
+        assert server._sync_bridge_readiness() is True
+        clock[0] += 4.9
+        assert server._sync_bridge_readiness() is True
+        assert server._readiness.report_subset()["dcc"] is True
+
+        clock[0] += 0.2
+        assert server._sync_bridge_readiness() is False
         assert server._readiness.report_subset()["dcc"] is False
     finally:
         server.stop()

@@ -6,6 +6,7 @@ import os
 import signal
 import sys
 import threading
+import time
 from pathlib import Path
 from typing import Any, Optional
 
@@ -20,6 +21,7 @@ from .dispatcher import UnityBridgeDispatcher
 
 _server: Optional["UnityMcpServer"] = None
 _READINESS_POLL_SECONDS = 0.25
+_BRIDGE_DISCONNECT_GRACE_SECONDS = 5.0
 
 
 def publish_scene_snapshot(snapshot: dict[str, Any]) -> None:
@@ -56,6 +58,8 @@ class UnityMcpServer(DccServerBase):
         self._readiness = AdapterReadinessBinder(self)
         self._readiness_stop = threading.Event()
         self._readiness_thread: Optional[threading.Thread] = None
+        self._bridge_ready = False
+        self._bridge_disconnected_at: Optional[float] = None
         self._set_bridge_readiness(False)
 
     def start(self, **kwargs: Any) -> Any:
@@ -84,6 +88,7 @@ class UnityMcpServer(DccServerBase):
                 stop_bridge()
 
     def _set_bridge_readiness(self, ready: bool) -> None:
+        self._bridge_ready = ready
         self._readiness.mark_dispatcher_ready(
             ready,
             host_execution_bridge_ready=ready,
@@ -93,6 +98,14 @@ class UnityMcpServer(DccServerBase):
 
     def _sync_bridge_readiness(self) -> bool:
         ready = get_bridge().is_connected()
+        if ready:
+            self._bridge_disconnected_at = None
+        elif self._bridge_ready:
+            now = time.monotonic()
+            if self._bridge_disconnected_at is None:
+                self._bridge_disconnected_at = now
+            if now - self._bridge_disconnected_at < _BRIDGE_DISCONNECT_GRACE_SECONDS:
+                return True
         self._set_bridge_readiness(ready)
         return ready
 
