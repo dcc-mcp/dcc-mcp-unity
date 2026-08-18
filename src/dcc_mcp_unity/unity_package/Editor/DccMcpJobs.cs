@@ -801,7 +801,9 @@ namespace DccMcp.Unity
             summary["relative_path"] = (string)job["test_report_relative_path"];
             summary["test_mode"] = parameters["test_mode"].DeepClone();
             summary["test_names"] = parameters["test_names"].DeepClone();
-            DccMcpTestRunner.ReleaseCallback((string)job["request_id"]);
+            DccMcpTestRunner.ReleaseCallback(
+                (string)job["request_id"],
+                (string)job["test_report_path"]);
             Succeed(job, summary);
         }
 
@@ -1361,7 +1363,11 @@ namespace DccMcp.Unity
         {
             if ((string)job["kind"] == "project.run_tests")
             {
-                DccMcpTestRunner.ReleaseCallback((string)job["request_id"]);
+                DccMcpTestRunner.ReleaseCallback(
+                    (string)job["request_id"],
+                    job["test_report_path"] == null
+                        ? null
+                        : (string)job["test_report_path"]);
             }
             job["state"] = "failed";
             job["phase"] = "complete";

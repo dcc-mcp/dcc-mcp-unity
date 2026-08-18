@@ -198,9 +198,9 @@ namespace DccMcp.Unity
             };
         }
 
-        internal static void ReleaseCallback(string requestId)
+        internal static void ReleaseCallback(string requestId, string reportPath)
         {
-            DccMcpTestFrameworkBridge.ReleaseCallback(requestId);
+            DccMcpTestFrameworkBridge.ReleaseCallback(requestId, reportPath);
         }
 
         private static int ReadIntAttribute(XmlElement element, params string[] names)

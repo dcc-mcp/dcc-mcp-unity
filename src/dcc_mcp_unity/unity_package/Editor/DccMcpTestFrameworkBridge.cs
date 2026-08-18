@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.IO;
 using System.Reflection;
 using Newtonsoft.Json.Linq;
 using UnityEngine;
@@ -112,14 +113,15 @@ namespace DccMcp.Unity
             RegisterCallbackIfMissing(apiType, api, callbackType, requestId, reportPath);
         }
 
-        internal static bool IsCallbackRegistered(string requestId)
+        internal static bool IsCallbackRegistered(string requestId, string reportPath = null)
         {
+            var assembly = LoadTestRunnerAssembly();
             var expectedName = CallbackNamePrefix + requestId;
-            foreach (var entry in GetCallbacks(LoadTestRunnerAssembly()))
+            var callbackType = RequireType(assembly, ResultsCallbackTypeName);
+            foreach (var entry in GetCallbacks(assembly))
             {
                 var callback = GetCallback(entry);
-                if (callback != null
-                    && string.Equals(callback.name, expectedName, StringComparison.Ordinal))
+                if (MatchesCallback(callback, callbackType, expectedName, reportPath))
                 {
                     return true;
                 }
@@ -127,14 +129,16 @@ namespace DccMcp.Unity
             return false;
         }
 
-        internal static void ReleaseCallback(string requestId)
+        internal static void ReleaseCallback(string requestId, string reportPath)
         {
-            var callbacks = GetCallbacks(LoadTestRunnerAssembly());
+            var assembly = LoadTestRunnerAssembly();
+            var callbacks = GetCallbacks(assembly);
+            var callbackType = RequireType(assembly, ResultsCallbackTypeName);
             var expectedName = CallbackNamePrefix + requestId;
             for (var index = callbacks.Count - 1; index >= 0; index--)
             {
                 var callback = GetCallback(callbacks[index]);
-                if (callback != null && string.Equals(callback.name, expectedName, StringComparison.Ordinal))
+                if (MatchesCallback(callback, callbackType, expectedName, reportPath))
                 {
                     callbacks.RemoveAt(index);
                     UnityEngine.Object.DestroyImmediate(callback);
@@ -149,15 +153,126 @@ namespace DccMcp.Unity
             string requestId,
             string reportPath)
         {
-            if (IsCallbackRegistered(requestId))
+            var callbacks = GetCallbacks(LoadTestRunnerAssembly());
+            var expectedName = CallbackNamePrefix + requestId;
+            var foundExpected = false;
+            for (var index = callbacks.Count - 1; index >= 0; index--)
+            {
+                var callback = GetCallback(callbacks[index]);
+                if (MatchesCallback(callback, callbackType, expectedName, reportPath))
+                {
+                    if (!foundExpected)
+                    {
+                        foundExpected = true;
+                        continue;
+                    }
+                }
+                else if (!IsOwnedResultsCallback(callback, callbackType))
+                {
+                    continue;
+                }
+
+                callbacks.RemoveAt(index);
+                UnityEngine.Object.DestroyImmediate(callback);
+            }
+            if (foundExpected)
             {
                 return;
             }
-            var callback = CreateScriptableObject(
+            var registeredCallback = CreateScriptableObject(
                 callbackType,
                 CallbackNamePrefix + requestId);
-            SetRequiredMember(callback, "m_ResultFilePath", reportPath);
-            RegisterCallback(apiType, api, callbackType, callback);
+            SetRequiredMember(registeredCallback, "m_ResultFilePath", reportPath);
+            RegisterCallback(apiType, api, callbackType, registeredCallback);
+        }
+
+        private static bool MatchesCallback(
+            UnityEngine.Object callback,
+            Type callbackType,
+            string expectedName,
+            string reportPath)
+        {
+            if (callback == null || !callbackType.IsInstanceOfType(callback))
+            {
+                return false;
+            }
+            if (string.Equals(callback.name, expectedName, StringComparison.Ordinal))
+            {
+                return true;
+            }
+            return !string.IsNullOrEmpty(reportPath)
+                && PathsEqual(ReadResultPath(callback), reportPath);
+        }
+
+        private static bool IsOwnedResultsCallback(UnityEngine.Object callback, Type callbackType)
+        {
+            if (callback == null || !callbackType.IsInstanceOfType(callback))
+            {
+                return false;
+            }
+            if (!string.IsNullOrEmpty(callback.name)
+                && callback.name.StartsWith(CallbackNamePrefix, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            var reportPath = ReadResultPath(callback);
+            if (string.IsNullOrEmpty(reportPath))
+            {
+                return false;
+            }
+            try
+            {
+                var projectPath = Path.GetFullPath(
+                    Path.GetDirectoryName(Application.dataPath) ?? string.Empty);
+                var reportsRoot = Path.GetFullPath(Path.Combine(
+                    projectPath,
+                    "Builds",
+                    "DccMcp",
+                    "Tests"));
+                var fullPath = Path.GetFullPath(reportPath);
+                var comparison = Path.DirectorySeparatorChar == '\\'
+                    ? StringComparison.OrdinalIgnoreCase
+                    : StringComparison.Ordinal;
+                return fullPath.StartsWith(
+                    reportsRoot + Path.DirectorySeparatorChar,
+                    comparison);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+        }
+
+        private static string ReadResultPath(UnityEngine.Object callback)
+        {
+            var flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+            var field = callback.GetType().GetField("m_ResultFilePath", flags);
+            if (field != null)
+            {
+                return field.GetValue(callback) as string;
+            }
+            var property = callback.GetType().GetProperty("m_ResultFilePath", flags);
+            return property == null ? null : property.GetValue(callback, null) as string;
+        }
+
+        private static bool PathsEqual(string left, string right)
+        {
+            if (string.IsNullOrEmpty(left) || string.IsNullOrEmpty(right))
+            {
+                return false;
+            }
+            var comparison = Path.DirectorySeparatorChar == '\\'
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            try
+            {
+                return string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), comparison);
+            }
+            catch (Exception)
+            {
+                return false;
+            }
         }
 
         private static IList GetCallbacks(Assembly assembly)
