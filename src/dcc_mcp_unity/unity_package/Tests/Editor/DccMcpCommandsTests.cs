@@ -357,12 +357,55 @@ namespace DccMcp.Unity.Tests
             }
             finally
             {
-                DccMcpTestFrameworkBridge.ReleaseCallback(requestId);
+                DccMcpTestFrameworkBridge.ReleaseCallback(requestId, reportPath);
             }
 
             Assert.That(
                 DccMcpTestFrameworkBridge.IsCallbackRegistered(requestId),
                 Is.False);
+        }
+
+        [Test]
+        public void TestRunnerCallbackRegistrationKeepsOnlyActiveRequest()
+        {
+            var firstRequestId = Guid.NewGuid().ToString("D");
+            var secondRequestId = Guid.NewGuid().ToString("D");
+            var projectPath = Path.GetDirectoryName(Application.dataPath) ?? string.Empty;
+            var firstReportPath = Path.Combine(
+                projectPath,
+                "Builds",
+                "DccMcp",
+                "Tests",
+                firstRequestId,
+                "results.xml");
+            var secondReportPath = Path.Combine(
+                projectPath,
+                "Builds",
+                "DccMcp",
+                "Tests",
+                secondRequestId,
+                "results.xml");
+
+            try
+            {
+                DccMcpTestFrameworkBridge.EnsureCallback(firstRequestId, firstReportPath);
+                DccMcpTestFrameworkBridge.EnsureCallback(secondRequestId, secondReportPath);
+
+                Assert.That(
+                    DccMcpTestFrameworkBridge.IsCallbackRegistered(
+                        firstRequestId,
+                        firstReportPath),
+                    Is.False);
+                Assert.That(
+                    DccMcpTestFrameworkBridge.IsCallbackRegistered(
+                        secondRequestId,
+                        secondReportPath),
+                    Is.True);
+            }
+            finally
+            {
+                DccMcpTestFrameworkBridge.ReleaseCallback(secondRequestId, secondReportPath);
+            }
         }
 
         [Test]
