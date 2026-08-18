@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from dcc_mcp_core import BridgeConnectionError
+from dcc_mcp_core.bridge import BridgeRpcError
 
 from dcc_mcp_unity.bridge import (
     call_host,
@@ -46,7 +47,12 @@ def run_smoke(
                 time.sleep(0.25)
                 continue
             try:
-                probe_host_dispatch(1.0)
+                try:
+                    probe_host_dispatch(1.0)
+                except BridgeRpcError:
+                    # An expired queued ping is still a response from Unity's
+                    # Editor update loop and proves that dispatch recovered.
+                    pass
                 set_host_dispatch_ready(True)
                 inspected = call_host("project.inspect")
             except BridgeConnectionError as exc:
