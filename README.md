@@ -33,6 +33,13 @@ The Editor package reconnects to the loopback bridge at `ws://127.0.0.1:3852`; s
 to override it. `DCC_MCP_UNITY_BRIDGE_TIMEOUT` may increase the 60-second RPC timeout but cannot
 lower it; queued Editor work expires first so timed-out mutations are not executed later.
 
+Transport connection does not imply that Unity's Editor update loop is responsive. The adapter
+probes that loop separately; when a native modal dialog blocks it, subsequent typed calls fail
+quickly with recovery guidance instead of waiting for the bridge timeout. Use
+`dcc-mcp-cli ui-control` for the same instance, or search `ui-control` and load Core's `app-ui`
+compatibility Skill from an MCP client. The recovery session must bind the exact Unity PID/HWND
+through `dcc-cua`, dismiss one modal action, and then verify a fresh readiness probe before retrying.
+
 The default bridge targets one Unity Editor. For concurrent Editors, run one adapter per Editor and
 assign each pair a unique bridge port and URL before starting either process.
 

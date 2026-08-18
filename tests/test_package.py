@@ -38,15 +38,23 @@ def test_server_readiness_monitor_tracks_unity_bridge_connection(monkeypatch):
         def is_connected(self):
             return connected.is_set()
 
+        def call(self, *_args, **_kwargs):
+            return {"host_dispatch_ready": True}
+
     monkeypatch.setattr(server_module, "get_bridge", FakeBridge)
+    monkeypatch.setattr(
+        server_module,
+        "probe_host_dispatch",
+        lambda _deadline: {"host_dispatch_ready": True},
+    )
     monkeypatch.setattr(server_module, "_READINESS_POLL_SECONDS", 0.001)
     monkeypatch.setattr(server_module, "_BRIDGE_DISCONNECT_GRACE_SECONDS", 0)
     server = UnityMcpServer(port=0)
     set_readiness = server._set_bridge_readiness
 
-    def record_transition(ready):
-        set_readiness(ready)
-        transitioned[ready].set()
+    def record_transition(transport_ready, host_dispatch_ready):
+        set_readiness(transport_ready, host_dispatch_ready)
+        transitioned[host_dispatch_ready].set()
 
     monkeypatch.setattr(server, "_set_bridge_readiness", record_transition)
     try:
@@ -89,12 +97,23 @@ def test_server_readiness_graces_brief_bridge_disconnect(monkeypatch):
         def is_connected(self):
             return self.connected
 
+        def call(self, *_args, **_kwargs):
+            return {"host_dispatch_ready": True}
+
     bridge = FakeBridge()
     monkeypatch.setattr(server_module, "get_bridge", lambda: bridge)
+    monkeypatch.setattr(
+        server_module,
+        "probe_host_dispatch",
+        lambda _deadline: {"host_dispatch_ready": True},
+    )
     monkeypatch.setattr(server_module.time, "monotonic", lambda: clock[0])
     server = UnityMcpServer(port=0)
     try:
         assert server._sync_bridge_readiness() is True
+        server._host_probe_thread.join(timeout=1.0)
+        assert server._sync_bridge_readiness() is True
+        assert server._readiness.report_subset()["dcc"] is True
 
         bridge.connected = False
         assert server._sync_bridge_readiness() is True
@@ -106,6 +125,51 @@ def test_server_readiness_graces_brief_bridge_disconnect(monkeypatch):
         assert server._sync_bridge_readiness() is False
         assert server._readiness.report_subset()["dcc"] is False
     finally:
+        server.stop()
+
+
+def test_server_detects_blocked_host_while_transport_stays_ready(monkeypatch):
+    release_blocked_probe = threading.Event()
+    first_response = threading.Event()
+
+    class FakeBridge:
+        def is_connected(self):
+            return True
+
+        def call(self, *_args, **_kwargs):
+            if not first_response.is_set():
+                first_response.set()
+                return {"host_dispatch_ready": True}
+            release_blocked_probe.wait(timeout=1.0)
+            return {"host_dispatch_ready": True}
+
+    monkeypatch.setattr(server_module, "get_bridge", FakeBridge)
+    monkeypatch.setattr(server_module, "probe_host_dispatch", lambda _deadline: FakeBridge().call())
+    monkeypatch.setattr(server_module, "_READINESS_POLL_SECONDS", 0.001)
+    monkeypatch.setattr(server_module, "_HOST_PROBE_STALE_SECONDS", 0.02)
+    server = UnityMcpServer(port=0)
+    try:
+        server._start_readiness_monitor()
+        deadline = server_module.time.monotonic() + 1.0
+        while server_module.time.monotonic() < deadline:
+            if server._readiness.report_subset()["main_thread_executor"]:
+                break
+            server_module.time.sleep(0.005)
+        assert server._readiness.report_subset()["main_thread_executor"] is True
+
+        deadline = server_module.time.monotonic() + 1.0
+        while server_module.time.monotonic() < deadline:
+            if not server._readiness.report_subset()["main_thread_executor"]:
+                break
+            server_module.time.sleep(0.005)
+        report = server._readiness.report_subset()
+        assert report["dispatcher"] is True
+        assert report["host_execution_bridge"] is True
+        assert report["main_thread_executor"] is True
+        assert report["dcc"] is True
+        assert server._host_dispatch_ready is False
+    finally:
+        release_blocked_probe.set()
         server.stop()
 
 

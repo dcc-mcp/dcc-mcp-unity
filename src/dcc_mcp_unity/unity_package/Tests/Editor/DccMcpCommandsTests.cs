@@ -162,6 +162,14 @@ namespace DccMcp.Unity.Tests
         }
 
         [Test]
+        public void HostPingProvesTheEditorUpdateLoopIsDispatching()
+        {
+            var result = DccMcpCommands.Execute("host.ping", new JObject());
+
+            Assert.That((bool)result["host_dispatch_ready"], Is.True);
+        }
+
+        [Test]
         public void ConfigureSpriteImporterUsesTypedProjectScopedSettings()
         {
             const string assetPath = "Assets/DccMcpJobTests/FrostSpear.png";

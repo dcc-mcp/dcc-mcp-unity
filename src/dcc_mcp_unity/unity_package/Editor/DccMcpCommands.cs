@@ -30,6 +30,9 @@ namespace DccMcp.Unity
                 JObject result;
                 switch (method)
                 {
+                    case "host.ping":
+                        result = new JObject { ["host_dispatch_ready"] = true };
+                        break;
                     case "project.inspect":
                         result = InspectProject();
                         break;
