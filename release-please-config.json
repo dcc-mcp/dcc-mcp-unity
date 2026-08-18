@@ -22,6 +22,10 @@
         },
         {
           "type": "generic",
+          "path": "src/dcc_mcp_unity/unity_package/Editor/DccMcpMenu.cs"
+        },
+        {
+          "type": "generic",
           "path": "src/dcc_mcp_unity/skills/unity-project/SKILL.md"
         },
         {
