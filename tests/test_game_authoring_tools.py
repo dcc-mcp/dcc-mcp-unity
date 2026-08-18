@@ -71,6 +71,15 @@ def _load_script(skill: str, name: str):
         ),
         (
             "unity-project",
+            "build_android_player",
+            "project.build_android_player",
+            {
+                "request_id": "778e72dd-e536-4ff8-aad0-9b752ab61c3b",
+                "artifact_kind": "aab",
+            },
+        ),
+        (
+            "unity-project",
             "run_tests",
             "project.run_tests",
             {
@@ -113,6 +122,7 @@ def test_game_authoring_wrappers_forward_only_typed_arguments(
         "refresh_and_compile",
         "set_play_mode",
         "build_windows_player",
+        "build_android_player",
         "run_tests",
         "capture_game_view",
     }:
@@ -161,6 +171,7 @@ def test_game_authoring_manifests_declare_the_bounded_surface():
         "refresh_and_compile",
         "set_play_mode",
         "build_windows_player",
+        "build_android_player",
         "run_tests",
     ):
         assert f"- name: {name}" in project
@@ -219,13 +230,14 @@ def test_job_tool_schemas_publish_states_and_accept_the_standard_error_envelope(
                 "refresh_and_compile",
                 "set_play_mode",
                 "build_windows_player",
+                "build_android_player",
                 "run_tests",
                 "inspect_job",
                 "capture_game_view",
             }
         )
 
-    assert len(job_tools) == 7
+    assert len(job_tools) == 8
     standard_error = skill_error("failed", "transport error")
     successful_job = {
         "success": True,
@@ -385,6 +397,7 @@ def test_editor_job_protocol_is_persistent_fail_closed_and_bounded():
         "editor.set_play_mode",
         "jobs.inspect",
         "project.build_windows_player",
+        "project.build_android_player",
         "project.run_tests",
         "editor.capture_game_view",
     ):
@@ -413,6 +426,12 @@ def test_editor_job_protocol_is_persistent_fail_closed_and_bounded():
     assert "openScene.isDirty" in jobs
     assert '"Builds", "DccMcp"' in jobs
     assert "BuildTarget.StandaloneWindows64" in jobs
+    assert "BuildTarget.Android" in jobs
+    assert "BuildPipeline.IsBuildTargetSupported" in jobs
+    assert "EditorUserBuildSettings.buildAppBundle" in jobs
+    assert 'ReadAndroidSigningSetting("useCustomKeystore")' in jobs
+    assert "signing secrets are never accepted" in jobs
+    assert "HashFile(outputPath)" in jobs
     assert '"DccMcpGame_Data"' in jobs
     assert "ScreenCapture.CaptureScreenshot" in jobs
     assert 'GetType("UnityEditor.GameView")' in jobs
@@ -421,6 +440,29 @@ def test_editor_job_protocol_is_persistent_fail_closed_and_bounded():
     assert "Game View capture requires Play Mode" in jobs
     assert "CompileAssemblyFromSource" not in jobs
     assert "Process.Start" not in jobs
+
+
+def test_android_build_contract_is_typed_and_never_accepts_signing_secrets():
+    manifest = yaml.safe_load((SKILLS / "unity-project" / "tools.yaml").read_text("utf-8"))
+    tool = next(tool for tool in manifest["tools"] if tool["name"] == "build_android_player")
+    properties = tool["input_schema"]["properties"]
+
+    assert set(properties) == {"request_id", "artifact_kind"}
+    assert properties["artifact_kind"]["enum"] == ["apk", "aab"]
+    assert tool["input_schema"]["additionalProperties"] is False
+    result = tool["output_schema"]["properties"]["context"]["properties"]["result"]
+    assert {
+        "target",
+        "artifact_kind",
+        "build_report_outcome",
+        "errors",
+        "warnings",
+        "duration_seconds",
+        "scenes",
+    } <= set(result["required"])
+    succeeded_requirement = result["allOf"][0]["then"]["required"]
+    assert set(succeeded_requirement) == {"relative_path", "bytes", "sha256"}
+    assert "password" not in json.dumps(tool).lower()
 
 
 def test_typed_test_runner_uses_bounded_exact_filters_and_native_nunit_evidence():

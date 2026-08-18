@@ -267,6 +267,34 @@ namespace DccMcp.Unity.Tests
         }
 
         [Test]
+        public void AndroidBuildSubmissionAcceptsOnlyTypedArtifactKinds()
+        {
+            Assert.That(
+                () => DccMcpCommands.Execute(
+                    "project.build_android_player",
+                    new JObject
+                    {
+                        ["request_id"] = Guid.NewGuid().ToString("D"),
+                        ["artifact_kind"] = "zip",
+                    }),
+                Throws.TypeOf<InvalidOperationException>()
+                    .With.Message.Contains("apk or aab"));
+
+            var requestId = Guid.NewGuid().ToString("D");
+            var submitted = DccMcpCommands.Execute(
+                "project.build_android_player",
+                new JObject
+                {
+                    ["request_id"] = requestId,
+                    ["artifact_kind"] = "apk",
+                });
+
+            Assert.That((string)submitted["request_id"], Is.EqualTo(requestId));
+            Assert.That((string)submitted["kind"], Is.EqualTo("project.build_android_player"));
+            Assert.That((string)submitted["state"], Is.EqualTo("queued"));
+        }
+
+        [Test]
         public void JobStoreParsingPreservesRoundTripUtcTimestampsAsStrings()
         {
             var timestamp = DateTime.UtcNow.ToString("O");

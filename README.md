@@ -90,6 +90,10 @@ For local development, run `dcc-mcp-unity-standalone --bridge-port 3852 --watch-
 8. `build_windows_player` persists an active-target switch when needed, rejects dirty enabled scenes,
    and builds exactly the saved Build Settings scenes to a new UUID directory below `Builds/DccMcp`.
    Poll the job and launch the reported executable as a separate acceptance gate.
+9. `build_android_player` applies the same persistent scene and request boundaries to APK or AAB
+   output. It fails closed when Android support or required project signing is unavailable, never
+   accepts signing secrets, restores the app-bundle setting, and reports BuildReport metadata plus
+   the artifact size and SHA-256.
 
 Do not replace a timed-out job with a new UUID. Reconnect and inspect the original `request_id`;
 Unity persists queued/running/succeeded/failed state across domain reloads and rejects reuse with
