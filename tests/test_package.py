@@ -342,6 +342,13 @@ def test_runtime_version_matches_distribution_metadata():
     assert __version__ == project_version.group(1)
     upm_package = json.loads((PACKAGE / "package.json").read_text(encoding="utf-8"))
     assert __version__ == upm_package["version"]
+    menu = (PACKAGE / "Editor" / "DccMcpMenu.cs").read_text(encoding="utf-8")
+    menu_version = re.search(
+        r'AdapterVersion = "([^"]+)"; // x-release-please-version',
+        menu,
+    )
+    assert menu_version is not None
+    assert __version__ == menu_version.group(1)
     for skill in (ROOT / "src" / "dcc_mcp_unity" / "skills").iterdir():
         if skill.is_dir():
             skill_text = (skill / "SKILL.md").read_text(encoding="utf-8")
@@ -361,6 +368,7 @@ def test_runtime_version_matches_distribution_metadata():
     extra_paths = {item["path"] for item in release_config["packages"]["."]["extra-files"]}
     assert {
         "src/dcc_mcp_unity/unity_package/package.json",
+        "src/dcc_mcp_unity/unity_package/Editor/DccMcpMenu.cs",
         "src/dcc_mcp_unity/skills/unity-project/SKILL.md",
         "src/dcc_mcp_unity/skills/unity-scene/SKILL.md",
         "src/dcc_mcp_unity/skills/unity-diagnostics/SKILL.md",
