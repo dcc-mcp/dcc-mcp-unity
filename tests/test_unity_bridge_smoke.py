@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 from dcc_mcp_core import BridgeConnectionError
+from dcc_mcp_core.bridge import BridgeRpcError
 
 from tools import unity_bridge_smoke
 
@@ -16,11 +17,12 @@ def test_bridge_smoke_records_verified_editor(monkeypatch, tmp_path: Path):
     stopped = []
     probes = []
     monkeypatch.setattr(unity_bridge_smoke, "start_bridge", FakeBridge)
-    monkeypatch.setattr(
-        unity_bridge_smoke,
-        "probe_host_dispatch",
-        lambda deadline: probes.append(deadline),
-    )
+
+    def expired_probe(deadline):
+        probes.append(deadline)
+        raise BridgeRpcError(-32002, "expired before main-thread execution")
+
+    monkeypatch.setattr(unity_bridge_smoke, "probe_host_dispatch", expired_probe)
     monkeypatch.setattr(unity_bridge_smoke, "set_host_dispatch_ready", lambda _ready: None)
     monkeypatch.setattr(
         unity_bridge_smoke,
