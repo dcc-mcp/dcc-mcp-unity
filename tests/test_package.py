@@ -150,16 +150,17 @@ def test_server_detects_blocked_host_while_transport_stays_ready(monkeypatch):
     server = UnityMcpServer(port=0)
     try:
         server._start_readiness_monitor()
+        assert first_response.wait(timeout=1.0)
         deadline = server_module.time.monotonic() + 1.0
         while server_module.time.monotonic() < deadline:
-            if server._readiness.report_subset()["main_thread_executor"]:
+            if server._host_dispatch_ready:
                 break
             server_module.time.sleep(0.005)
-        assert server._readiness.report_subset()["main_thread_executor"] is True
+        assert server._host_dispatch_ready is True
 
         deadline = server_module.time.monotonic() + 1.0
         while server_module.time.monotonic() < deadline:
-            if not server._readiness.report_subset()["main_thread_executor"]:
+            if not server._host_dispatch_ready:
                 break
             server_module.time.sleep(0.005)
         report = server._readiness.report_subset()
