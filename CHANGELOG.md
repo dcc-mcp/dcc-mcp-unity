@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.12.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.11.2...v0.12.0) (2026-08-18)
+
+
+### Features
+
+* add persistent Android player builds ([b5e72f4](https://github.com/dcc-mcp/dcc-mcp-unity/commit/b5e72f463293dcc4958b9fc6e424231c4a0d1b6d))
+
+
+### Bug Fixes
+
+* detect blocked Unity host dispatch ([a7b0d9b](https://github.com/dcc-mcp/dcc-mcp-unity/commit/a7b0d9b8c3cf9cdcf154e35263899bdb6d1f2cf1))
+* keep Unity menu version in sync ([8ce546e](https://github.com/dcc-mcp/dcc-mcp-unity/commit/8ce546e69ee2151ad6e82d152194926e12200c8d))
+* preserve Unity test result callbacks ([fef8986](https://github.com/dcc-mcp/dcc-mcp-unity/commit/fef8986b0b17379049c69a8f0d708aed7d274e40))
+
 ## [0.11.2](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.11.1...v0.11.2) (2026-07-26)
 
 
