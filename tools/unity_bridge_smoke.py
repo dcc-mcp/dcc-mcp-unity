@@ -11,7 +11,13 @@ from typing import Any
 
 from dcc_mcp_core import BridgeConnectionError
 
-from dcc_mcp_unity.bridge import call_host, start_bridge, stop_bridge
+from dcc_mcp_unity.bridge import (
+    call_host,
+    probe_host_dispatch,
+    set_host_dispatch_ready,
+    start_bridge,
+    stop_bridge,
+)
 
 
 def _write_json_atomic(path: Path, payload: dict[str, Any]) -> None:
@@ -40,6 +46,8 @@ def run_smoke(
                 time.sleep(0.25)
                 continue
             try:
+                probe_host_dispatch(1.0)
+                set_host_dispatch_ready(True)
                 inspected = call_host("project.inspect")
             except BridgeConnectionError as exc:
                 last_disconnect = exc
