@@ -6,7 +6,7 @@ namespace DccMcp.Unity
 {
     internal static class DccMcpMenu
     {
-        private const string AdapterVersion = "0.11.2"; // x-release-please-version
+        private const string AdapterVersion = "0.12.0"; // x-release-please-version
         private const string ProjectUrl = "https://github.com/dcc-mcp/dcc-mcp-unity";
         private const string DefaultBridgeUrl = "ws://127.0.0.1:3852";
 
