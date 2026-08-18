@@ -283,6 +283,86 @@ tools:
     next-tools:
       on-success: [unity_diagnostics__inspect_job]
       on-failure: [unity_diagnostics__read_console, dcc_diagnostics__audit_log]
+  - name: build_android_player
+    description: Queue an Android APK or AAB build from exactly the enabled saved EditorBuildSettings scenes into a new request-specific directory below Builds/DccMcp. The job persists across target switching and domain reload, fails closed when Android support or required signing is unavailable, restores the app-bundle setting, and never accepts signing secrets.
+    input_schema:
+      type: object
+      required: [request_id, artifact_kind]
+      properties:
+        request_id:
+          type: string
+          pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+        artifact_kind:
+          type: string
+          enum: [apk, aab]
+      additionalProperties: false
+    output_schema:
+      type: object
+      required: [success, message, prompt, error, context]
+      properties:
+        success: {type: boolean}
+        message: {type: string}
+        prompt: {type: [string, "null"]}
+        error: {type: [string, "null"]}
+        context:
+          type: object
+          properties:
+            state: {type: string, enum: [queued, running, succeeded, failed]}
+            phase: {type: string}
+            result:
+              type: object
+              required: [target, artifact_kind, build_report_outcome, errors, warnings, duration_seconds, scenes]
+              properties:
+                target: {const: android}
+                artifact_kind: {type: string, enum: [apk, aab]}
+                build_report_outcome: {type: string}
+                errors: {type: integer, minimum: 0}
+                warnings: {type: integer, minimum: 0}
+                duration_seconds: {type: number, minimum: 0}
+                relative_path: {type: string}
+                bytes: {type: integer, minimum: 1}
+                sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+                scenes:
+                  type: array
+                  minItems: 1
+                  items: {type: string}
+              allOf:
+                - if:
+                    properties:
+                      build_report_outcome: {const: Succeeded}
+                    required: [build_report_outcome]
+                  then:
+                    required: [relative_path, bytes, sha256]
+          allOf:
+            - if:
+                properties:
+                  state: {const: succeeded}
+                required: [state]
+              then:
+                required: [result]
+      allOf:
+        - if:
+            properties:
+              success: {const: true}
+            required: [success]
+          then:
+            properties:
+              context:
+                required: [state, phase]
+    execution: async
+    affinity: main
+    enforce_thread_affinity: true
+    timeout_hint_secs: 3600
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
+    source_file: scripts/build_android_player.py
+    next-tools:
+      on-success: [unity_diagnostics__inspect_job]
+      on-failure: [unity_diagnostics__read_console, dcc_diagnostics__audit_log]
   - name: run_tests
     description: Queue the installed Unity Test Framework in EditMode or PlayMode, keep the Core job open until completion, and write request-scoped NUnit XML below Builds/DccMcp/Tests. Optional test_names are exact fully-qualified test or fixture names; at most 128 are accepted. Verify result.outcome and counts; zero matched tests fail closed. This does not launch a second Unity process or accept command-line arguments.
     input_schema:
