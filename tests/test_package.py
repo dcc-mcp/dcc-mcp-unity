@@ -129,40 +129,31 @@ def test_server_readiness_graces_brief_bridge_disconnect(monkeypatch):
 
 
 def test_server_detects_blocked_host_while_transport_stays_ready(monkeypatch):
+    clock = [100.0]
     release_blocked_probe = threading.Event()
-    first_response = threading.Event()
+    probe_calls = [0]
 
     class FakeBridge:
         def is_connected(self):
             return True
 
-        def call(self, *_args, **_kwargs):
-            if not first_response.is_set():
-                first_response.set()
-                return {"host_dispatch_ready": True}
+    def probe(_deadline):
+        probe_calls[0] += 1
+        if probe_calls[0] > 1:
             release_blocked_probe.wait(timeout=1.0)
-            return {"host_dispatch_ready": True}
 
     monkeypatch.setattr(server_module, "get_bridge", FakeBridge)
-    monkeypatch.setattr(server_module, "probe_host_dispatch", lambda _deadline: FakeBridge().call())
-    monkeypatch.setattr(server_module, "_READINESS_POLL_SECONDS", 0.001)
+    monkeypatch.setattr(server_module, "probe_host_dispatch", probe)
+    monkeypatch.setattr(server_module.time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(server_module, "_HOST_PROBE_STALE_SECONDS", 0.02)
     server = UnityMcpServer(port=0)
     try:
-        server._start_readiness_monitor()
-        assert first_response.wait(timeout=1.0)
-        deadline = server_module.time.monotonic() + 1.0
-        while server_module.time.monotonic() < deadline:
-            if server._host_dispatch_ready:
-                break
-            server_module.time.sleep(0.005)
+        server._run_host_probe()
+        assert server._sync_bridge_readiness() is True
         assert server._host_dispatch_ready is True
 
-        deadline = server_module.time.monotonic() + 1.0
-        while server_module.time.monotonic() < deadline:
-            if not server._host_dispatch_ready:
-                break
-            server_module.time.sleep(0.005)
+        clock[0] += 0.03
+        assert server._sync_bridge_readiness() is True
         report = server._readiness.report_subset()
         assert report["dispatcher"] is True
         assert report["host_execution_bridge"] is True
