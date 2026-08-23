@@ -201,6 +201,7 @@ def test_bundled_skills_release_and_upm_package_exist():
     assert test_assembly["optionalUnityReferences"] == ["TestAssemblies"]
     assert (PACKAGE / "Tests" / "Editor" / "DccMcpCommandsTests.cs").is_file()
     assert (PACKAGE / "Editor" / "DccMcpJobs.cs").is_file()
+    assert (PACKAGE / "Editor" / "DccMcpBootstrapErrors.cs").is_file()
 
     legacy_project = ROOT / "tests" / "unity-2018-project"
     legacy_manifest = json.loads(
@@ -336,6 +337,16 @@ def test_initialize_on_load_classes_guard_against_import_workers():
         assert "IsImportWorkerOrBatchMode" in text, (
             f"{source.name} is missing IsImportWorkerOrBatchMode guard in its static constructor"
         )
+
+
+def test_initialize_on_load_classes_capture_bootstrap_errors():
+    editor_dir = PACKAGE / "Editor"
+    for name in ("DccMcpBridge.cs", "DccMcpJobs.cs", "DccMcpConsole.cs"):
+        source = (editor_dir / name).read_text(encoding="utf-8")
+        assert "DccMcpBootstrapErrors.Capture" in source
+    capture = (editor_dir / "DccMcpBootstrapErrors.cs").read_text(encoding="utf-8")
+    assert '"bootstrap-errors.jsonl"' in capture
+    assert '["schema_version"] = "1"' in capture
 
 
 def test_unity_menu_unifies_dcc_mcp_entry_points():

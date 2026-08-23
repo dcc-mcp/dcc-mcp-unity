@@ -44,13 +44,21 @@ namespace DccMcp.Unity
 
         static DccMcpJobs()
         {
-            if (DccMcpBridge.IsImportWorkerOrBatchMode())
+            try
             {
-                return;
+                if (DccMcpBridge.IsImportWorkerOrBatchMode())
+                {
+                    return;
+                }
+                EditorApplication.update += Tick;
+                AssemblyReloadEvents.beforeAssemblyReload += Stop;
+                RestoreTestCallbackAfterReload();
             }
-            EditorApplication.update += Tick;
-            AssemblyReloadEvents.beforeAssemblyReload += Stop;
-            RestoreTestCallbackAfterReload();
+            catch (Exception exception)
+            {
+                DccMcpBootstrapErrors.Capture("jobs", exception);
+                Debug.LogError("DCC-MCP Unity jobs bootstrap failed: " + exception.Message);
+            }
         }
 
         internal static JObject ReadTextAsset(JObject parameters)

@@ -38,12 +38,20 @@ namespace DccMcp.Unity
 
         static DccMcpConsole()
         {
-            if (DccMcpBridge.IsImportWorkerOrBatchMode())
+            try
             {
-                return;
+                if (DccMcpBridge.IsImportWorkerOrBatchMode())
+                {
+                    return;
+                }
+                Application.logMessageReceivedThreaded += Capture;
+                AssemblyReloadEvents.beforeAssemblyReload += Stop;
             }
-            Application.logMessageReceivedThreaded += Capture;
-            AssemblyReloadEvents.beforeAssemblyReload += Stop;
+            catch (Exception exception)
+            {
+                DccMcpBootstrapErrors.Capture("console", exception);
+                Debug.LogError("DCC-MCP Unity console bootstrap failed: " + exception.Message);
+            }
         }
 
         internal static JObject Read(JObject parameters)

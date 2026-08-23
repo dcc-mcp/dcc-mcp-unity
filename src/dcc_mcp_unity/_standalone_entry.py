@@ -161,6 +161,17 @@ def main(argv: Sequence[str] | None = None) -> None:
     if _is_skill_script(resolved):
         _run_skill_script(resolved)
         return
+    if len(resolved) > 1 and resolved[1] in {
+        "install",
+        "status",
+        "verify",
+        "uninstall",
+        "upgrade",
+    }:
+        from .install import main as _install_main
+
+        _install_main(resolved[1:])
+        return
 
     options = _parse_args(resolved)
     _apply_options(options)

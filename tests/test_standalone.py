@@ -6,6 +6,8 @@ import sys
 import threading
 from pathlib import Path
 
+import dcc_mcp_unity.install as install_module
+from dcc_mcp_unity import _standalone_entry
 from dcc_mcp_unity._standalone_entry import (
     _claim_pid_file,
     _parse_args,
@@ -26,6 +28,13 @@ def test_standalone_options_are_explicit() -> None:
 def test_default_cli_uses_the_lifecycle_entrypoint() -> None:
     pyproject = (Path(__file__).parents[1] / "pyproject.toml").read_text(encoding="utf-8")
     assert 'dcc-mcp-unity = "dcc_mcp_unity._standalone_entry:main"' in pyproject
+
+
+def test_standard_install_verbs_dispatch_without_starting_sidecar(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(install_module, "main", lambda arguments: calls.append(arguments))
+    _standalone_entry.main(["dcc-mcp-unity", "status", "--json"])
+    assert calls == [["status", "--json"]]
 
 
 def test_pid_file_claim_is_atomic(tmp_path, monkeypatch) -> None:

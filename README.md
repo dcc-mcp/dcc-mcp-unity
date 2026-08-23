@@ -14,7 +14,8 @@ scripting runtime is required when using Unity 2018.4.
 
 ```bash
 pip install dcc-mcp-unity
-dcc-mcp-unity-install /path/to/UnityProject
+dcc-mcp-unity install --project /path/to/UnityProject --dry-run
+dcc-mcp-unity install --project /path/to/UnityProject --yes
 ```
 
 Open or restart the Unity project so Package Manager compiles **DCC-MCP Unity**, then run:
@@ -24,7 +25,8 @@ dcc-mcp-unity
 ```
 
 See the [installation guide](https://github.com/dcc-mcp/dcc-mcp-unity/blob/main/install.md) for
-upgrade, environment, and connection verification details.
+JSON output, verification, upgrade, uninstall, rollback, and troubleshooting details. The legacy
+`dcc-mcp-unity-install` entry point remains available during migration.
 
 The MCP endpoint uses a free loopback port and is registered for gateway discovery. Set
 `DCC_MCP_UNITY_PORT=8765` before starting the server only when a fixed direct endpoint is needed.
