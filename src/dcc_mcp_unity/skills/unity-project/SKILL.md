@@ -6,7 +6,7 @@ description: >-
   tests, change Play Mode, and build Windows or Android players. Not for GameObject edits
   — use unity-scene.
 license: MIT
-compatibility: "Unity 2018.4.25f1+ (.NET 4.x); dcc-mcp-core 0.19.49+"
+compatibility: "Unity 2018.4.25f1+ (.NET 4.x); dcc-mcp-core 0.19.90+"
 allowed-tools: "python"
 metadata:
   dcc-mcp:

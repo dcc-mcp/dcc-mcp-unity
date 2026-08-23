@@ -96,22 +96,30 @@ namespace DccMcp.Unity
 
         static DccMcpBridge()
         {
-            if (IsImportWorkerOrBatchMode())
+            try
             {
-                return;
+                if (IsImportWorkerOrBatchMode())
+                {
+                    return;
+                }
+                if (MaxEscapedTextEnvelopeBytes > Math.Min(
+                    MaxInboundMessageBytes,
+                    MaxOutboundMessageBytes))
+                {
+                    throw new InvalidOperationException(
+                        "Unity text asset and bridge message limits are inconsistent.");
+                }
+                EditorApplication.update += OnEditorUpdate;
+                EditorApplication.quitting += Stop;
+                AssemblyReloadEvents.beforeAssemblyReload += Stop;
+                DccMcpSidecarLauncher.StartIfConfigured();
+                _ = RunAsync(Lifetime.Token);
             }
-            if (MaxEscapedTextEnvelopeBytes > Math.Min(
-                MaxInboundMessageBytes,
-                MaxOutboundMessageBytes))
+            catch (Exception exception)
             {
-                throw new InvalidOperationException(
-                    "Unity text asset and bridge message limits are inconsistent.");
+                DccMcpBootstrapErrors.Capture("bridge", exception);
+                Debug.LogError("DCC-MCP Unity bridge bootstrap failed: " + exception.Message);
             }
-            EditorApplication.update += OnEditorUpdate;
-            EditorApplication.quitting += Stop;
-            AssemblyReloadEvents.beforeAssemblyReload += Stop;
-            DccMcpSidecarLauncher.StartIfConfigured();
-            _ = RunAsync(Lifetime.Token);
         }
 
         internal static bool IsImportWorkerOrBatchMode()

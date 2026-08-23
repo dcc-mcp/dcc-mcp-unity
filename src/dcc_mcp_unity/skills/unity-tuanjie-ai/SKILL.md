@@ -6,7 +6,7 @@ description: >-
   material, audio, video, terrain, and session-asset tasks. Not for other Unity
   project or scene operations.
 license: MIT
-compatibility: "Tuanjie with cn.tuanjie.codely.bridge and a native CustomTool provider; dcc-mcp-core 0.19.49+"
+compatibility: "Tuanjie with cn.tuanjie.codely.bridge and a native CustomTool provider; dcc-mcp-core 0.19.90+"
 allowed-tools: "python"
 metadata:
   dcc-mcp:
