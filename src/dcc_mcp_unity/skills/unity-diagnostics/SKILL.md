@@ -12,7 +12,7 @@ metadata:
   dcc-mcp:
     dcc: unity
     layer: domain
-    version: "0.12.0"  # x-release-please-version
+    version: "0.13.0"  # x-release-please-version
     search-hint: "Unity ping readiness job status Console logs errors Game View screenshot PNG diagnostics"
     tags: "unity,console,logs,diagnostics,game-development"
     tools: tools.yaml
