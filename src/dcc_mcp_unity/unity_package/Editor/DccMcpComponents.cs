@@ -94,7 +94,7 @@ namespace DccMcp.Unity
                     PrefabUtility.IsPartOfPrefabInstance(component) ? "prefab_override" : "scene_local",
                 ["scene_path"] = component.gameObject.scene.path,
                 ["scene_dirty"] = component.gameObject.scene.IsValid() && component.gameObject.scene.isDirty,
-                ["asset_dirty"] = EditorUtility.IsPersistent(component) && EditorUtility.IsDirty(component),
+                ["asset_dirty"] = EditorUtility.IsPersistent(component) && EditorUtility.GetDirtyCount(component) != 0,
                 ["saved"] = false
             };
         }
@@ -216,7 +216,7 @@ namespace DccMcp.Unity
                 case SerializedPropertyType.Rect: var r = p.rectValue; return new JArray(r.x, r.y, r.width, r.height);
                 case SerializedPropertyType.Bounds: var b = p.boundsValue; return new JArray(b.center.x, b.center.y, b.center.z, b.size.x, b.size.y, b.size.z);
                 case SerializedPropertyType.ObjectReference:
-                    return p.objectReferenceValue == null ? JValue.CreateNull() : new JObject {
+                    return p.objectReferenceValue == null ? (JToken)JValue.CreateNull() : new JObject {
                         ["object_id"] = Handle(p.objectReferenceValue), ["asset_path"] = AssetDatabase.GetAssetPath(p.objectReferenceValue),
                         ["type"] = p.objectReferenceValue.GetType().FullName };
                 default: return JValue.CreateNull();
