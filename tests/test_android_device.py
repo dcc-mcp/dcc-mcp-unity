@@ -183,3 +183,55 @@ def test_sdk_precedes_path(tmp_path, monkeypatch):
 def test_truncated_screenshot_rejected():
     with pytest.raises(android.DeviceError):
         android._png(png()[:-1])
+
+
+def test_request_survives_unverified_installed_hash(device, monkeypatch):
+    _, _, kwargs, _ = device
+    monkeypatch.setattr(android, "_installed_digest", lambda *args: "0" * 64)
+    result = android.execute("install", **kwargs)
+    assert result["state"] == "unknown"
+    assert result["retry_safe"] is False
+
+
+def test_png_pixel_corruption_is_rejected():
+    data = bytearray(png())
+    data[45] ^= 1
+    with pytest.raises(android.DeviceError, match="checksum"):
+        android._png(bytes(data))
+
+
+@pytest.mark.parametrize("operation", ["install", "launch", "stop", "grant", "logs", "screenshot"])
+def test_wrappers_keep_failed_receipts_as_errors(monkeypatch, operation):
+    import importlib.util
+
+    names = {
+        "install": "install_android_apk",
+        "launch": "launch_android_package",
+        "stop": "stop_android_package",
+        "grant": "grant_android_permission",
+        "logs": "read_android_logcat",
+        "screenshot": "capture_android_screenshot",
+    }
+    script = (
+        Path(__file__).parents[1]
+        / "src/dcc_mcp_unity/skills/unity-project/scripts"
+        / (names[operation] + ".py")
+    )
+    spec = importlib.util.spec_from_file_location("android_wrapper_" + operation, script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    calls = []
+
+    def fail(*args, **kwargs):
+        calls.append((args, kwargs))
+        return {"state": "unknown", "retry_safe": False, "message": "Unverified"}
+
+    monkeypatch.setattr(module, "execute", fail)
+    args = dict(
+        request_id=str(uuid.uuid4()), build_request_id=str(uuid.uuid4()), device_id="0" * 32
+    )
+    if operation == "grant":
+        args["permission"] = "android.permission.CAMERA"
+    result = module.main(**args, arbitrary_shell="ignored")
+    assert "arbitrary_shell" not in calls[0][1]
+    assert result["success"] is False

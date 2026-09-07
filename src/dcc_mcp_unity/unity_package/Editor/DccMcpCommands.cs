@@ -140,9 +140,20 @@ namespace DccMcp.Unity
 
         private static JObject AndroidContext(JObject parameters)
         {
+            var configuredSdk = EditorPrefs.GetString("AndroidSdkRoot", "");
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var settings = assembly.GetType("UnityEditor.Android.AndroidExternalToolsSettings", false);
+                var property = settings == null ? null : settings.GetProperty("sdkRootPath");
+                if (property != null)
+                {
+                    configuredSdk = property.GetValue(null, null) as string ?? configuredSdk;
+                    break;
+                }
+            }
             var context = new JObject {
                 ["project_path"] = System.IO.Path.GetDirectoryName(Application.dataPath),
-                ["configured_sdk"] = EditorPrefs.GetString("AndroidSdkRoot", ""),
+                ["configured_sdk"] = configuredSdk,
                 ["bundled_sdk"] = System.IO.Path.Combine(EditorApplication.applicationContentsPath,
                     "PlaybackEngines/AndroidPlayer/SDK")
             };
