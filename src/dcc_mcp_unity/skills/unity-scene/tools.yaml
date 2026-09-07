@@ -116,14 +116,17 @@ tools:
       additionalProperties: false
     output_schema:
       type: object
-    read_only: true
-    destructive: false
-    idempotent: true
     execution: sync
     affinity: main
     enforce_thread_affinity: true
     timeout_hint_secs: 60
     source_file: scripts/list_components.py
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
   - name: inspect_component
     description: Inspect bounded serialized properties and a compare-and-swap fingerprint.
       Unsupported kinds are read-only.
@@ -144,14 +147,17 @@ tools:
       additionalProperties: false
     output_schema:
       type: object
-    read_only: true
-    destructive: false
-    idempotent: true
     execution: sync
     affinity: main
     enforce_thread_affinity: true
     timeout_hint_secs: 60
     source_file: scripts/inspect_component.py
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
   - name: add_component
     description: Add one exact fully qualified Component type through Unity Undo to
       a loaded scene object.
@@ -172,14 +178,17 @@ tools:
       additionalProperties: false
     output_schema:
       type: object
-    read_only: false
-    destructive: true
-    idempotent: false
     execution: sync
     affinity: main
     enforce_thread_affinity: true
     timeout_hint_secs: 60
     source_file: scripts/add_component.py
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: false
+      open_world_hint: false
+      deferred_hint: false
   - name: remove_component
     description: Remove one Component through Undo with optional fingerprint precondition;
       Transform removal is rejected.
@@ -199,14 +208,17 @@ tools:
       additionalProperties: false
     output_schema:
       type: object
-    read_only: false
-    destructive: true
-    idempotent: false
     execution: sync
     affinity: main
     enforce_thread_affinity: true
     timeout_hint_secs: 60
     source_file: scripts/remove_component.py
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: false
+      open_world_hint: false
+      deferred_hint: false
   - name: set_component_properties
     description: Stage and validate serialized values, apply with Undo, then return
       normalized readback. No implicit saves. Arrays support existing element paths
@@ -244,11 +256,14 @@ tools:
       additionalProperties: false
     output_schema:
       type: object
-    read_only: false
-    destructive: true
-    idempotent: false
     execution: sync
     affinity: main
     enforce_thread_affinity: true
     timeout_hint_secs: 60
     source_file: scripts/set_component_properties.py
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: false
+      open_world_hint: false
+      deferred_hint: false
