@@ -827,6 +827,7 @@ namespace DccMcp.Unity
             {
                 ["target"] = "android",
                 ["artifact_kind"] = artifactKind,
+                ["package_name"] = PlayerSettings.GetApplicationIdentifier(BuildTargetGroup.Android),
                 ["build_report_outcome"] = report.summary.result.ToString(),
                 ["errors"] = report.summary.totalErrors,
                 ["warnings"] = report.summary.totalWarnings,

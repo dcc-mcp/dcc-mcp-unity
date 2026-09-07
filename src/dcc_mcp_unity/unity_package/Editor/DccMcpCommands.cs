@@ -33,6 +33,9 @@ namespace DccMcp.Unity
                     case "host.ping":
                         result = new JObject { ["host_dispatch_ready"] = true };
                         break;
+                    case "android.context":
+                        result = AndroidContext(parameters);
+                        break;
                     case "project.inspect":
                         result = InspectProject();
                         break;
@@ -126,6 +129,19 @@ namespace DccMcp.Unity
                 throw new InvalidOperationException(
                     "Editor mutation commands are disabled while Unity is entering or in Play Mode.");
             }
+        }
+
+        private static JObject AndroidContext(JObject parameters)
+        {
+            var context = new JObject {
+                ["project_path"] = System.IO.Path.GetDirectoryName(Application.dataPath),
+                ["configured_sdk"] = EditorPrefs.GetString("AndroidSdkRoot", ""),
+                ["bundled_sdk"] = System.IO.Path.Combine(EditorApplication.applicationContentsPath,
+                    "PlaybackEngines/AndroidPlayer/SDK")
+            };
+            if (parameters["build_request_id"] != null)
+                context["build"] = DccMcpJobs.Inspect(new JObject { ["request_id"] = parameters["build_request_id"] });
+            return context;
         }
 
         private static JObject InspectProject()

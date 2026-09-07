@@ -422,3 +422,253 @@ tools:
     next-tools:
       on-success: [unity_diagnostics__inspect_job]
       on-failure: [unity_diagnostics__read_console, dcc_diagnostics__audit_log]
+  - name: enumerate_android_devices
+    description: Enumerate Android devices with redacted serials and authorization state.
+      No device is selected implicitly.
+    input_schema:
+      type: object
+      properties: {}
+      required: []
+      additionalProperties: false
+    output_schema:
+      type: object
+    read_only: true
+    destructive: false
+    idempotent: true
+    execution: async
+    job_strategy: monolithic
+    affinity: any
+    enforce_thread_affinity: true
+    timeout_hint_secs: 300
+    source_file: scripts/enumerate_android_devices.py
+  - name: install_android_apk
+    description: Install the exact APK from a completed Unity build, then verify the
+      installed base APK SHA-256. Reusing request_id returns the receipt without repeating
+      installation.
+    input_schema:
+      type: object
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        build_request_id:
+          type: string
+          format: uuid
+        device_id:
+          type: string
+          pattern: ^[0-9a-f]{32}$
+      required:
+      - request_id
+      - build_request_id
+      - device_id
+      additionalProperties: false
+    output_schema:
+      type: object
+    read_only: false
+    destructive: true
+    idempotent: true
+    execution: async
+    job_strategy: monolithic
+    affinity: any
+    enforce_thread_affinity: true
+    timeout_hint_secs: 300
+    source_file: scripts/install_android_apk.py
+  - name: launch_android_package
+    description: Launch the verified built package launcher activity on one authorized
+      device. No arbitrary activity or shell command.
+    input_schema:
+      type: object
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        build_request_id:
+          type: string
+          format: uuid
+        device_id:
+          type: string
+          pattern: ^[0-9a-f]{32}$
+      required:
+      - request_id
+      - build_request_id
+      - device_id
+      additionalProperties: false
+    output_schema:
+      type: object
+    read_only: false
+    destructive: true
+    idempotent: true
+    execution: async
+    job_strategy: monolithic
+    affinity: any
+    enforce_thread_affinity: true
+    timeout_hint_secs: 300
+    source_file: scripts/launch_android_package.py
+  - name: stop_android_package
+    description: Stop the verified built package and check stopped state on one selected
+      device.
+    input_schema:
+      type: object
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        build_request_id:
+          type: string
+          format: uuid
+        device_id:
+          type: string
+          pattern: ^[0-9a-f]{32}$
+      required:
+      - request_id
+      - build_request_id
+      - device_id
+      additionalProperties: false
+    output_schema:
+      type: object
+    read_only: false
+    destructive: true
+    idempotent: true
+    execution: async
+    job_strategy: monolithic
+    affinity: any
+    enforce_thread_affinity: true
+    timeout_hint_secs: 300
+    source_file: scripts/stop_android_package.py
+  - name: grant_android_permission
+    description: Grant one explicitly requested permission declared by the verified
+      installed package and read back its granted state.
+    input_schema:
+      type: object
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        build_request_id:
+          type: string
+          format: uuid
+        device_id:
+          type: string
+          pattern: ^[0-9a-f]{32}$
+        permission:
+          type: string
+          pattern: ^android\.permission\.[A-Z_]+$
+      required:
+      - request_id
+      - build_request_id
+      - device_id
+      - permission
+      additionalProperties: false
+    output_schema:
+      type: object
+    read_only: false
+    destructive: true
+    idempotent: true
+    execution: async
+    job_strategy: monolithic
+    affinity: any
+    enforce_thread_affinity: true
+    timeout_hint_secs: 300
+    source_file: scripts/grant_android_permission.py
+  - name: read_android_logcat
+    description: Capture bounded main-process Logcat for the verified built package,
+      optionally waiting for a literal marker. Crash/ANR summary covers captured process
+      logs only.
+    input_schema:
+      type: object
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        build_request_id:
+          type: string
+          format: uuid
+        device_id:
+          type: string
+          pattern: ^[0-9a-f]{32}$
+        marker:
+          type: string
+          minLength: 1
+          maxLength: 256
+        timeout_seconds:
+          type: integer
+          minimum: 1
+          maximum: 30
+          default: 10
+      required:
+      - request_id
+      - build_request_id
+      - device_id
+      additionalProperties: false
+    output_schema:
+      type: object
+    read_only: true
+    destructive: false
+    idempotent: true
+    execution: async
+    job_strategy: monolithic
+    affinity: any
+    enforce_thread_affinity: true
+    timeout_hint_secs: 300
+    source_file: scripts/read_android_logcat.py
+  - name: capture_android_screenshot
+    description: Capture a bounded PNG screenshot on the exact device after verifying
+      the installed build. Return dimensions, bytes, SHA-256 and request-scoped artifact
+      path.
+    input_schema:
+      type: object
+      properties:
+        request_id:
+          type: string
+          format: uuid
+        build_request_id:
+          type: string
+          format: uuid
+        device_id:
+          type: string
+          pattern: ^[0-9a-f]{32}$
+      required:
+      - request_id
+      - build_request_id
+      - device_id
+      additionalProperties: false
+    output_schema:
+      type: object
+    read_only: true
+    destructive: false
+    idempotent: true
+    execution: async
+    job_strategy: monolithic
+    affinity: any
+    enforce_thread_affinity: true
+    timeout_hint_secs: 300
+    source_file: scripts/capture_android_screenshot.py
+  - name: inspect_mobile_input
+    description: Identify an uploaded game/project and return the Android or iOS test
+      route without opening, extracting, installing, signing, or launching it. Supports
+      Unity projects, APK/AAB, IPA/Xcode, and Windows EXE classification.
+    input_schema:
+      type: object
+      required:
+      - path
+      properties:
+        path:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        target_platform:
+          type: string
+          enum:
+          - android
+          - ios
+          default: android
+      additionalProperties: false
+    output_schema:
+      type: object
+    read_only: true
+    destructive: false
+    idempotent: true
+    execution: sync
+    affinity: any
+    enforce_thread_affinity: true
+    source_file: scripts/inspect_mobile_input.py
