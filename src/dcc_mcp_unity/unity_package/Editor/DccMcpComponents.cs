@@ -95,7 +95,7 @@ namespace DccMcp.Unity
                     PrefabUtility.IsPartOfPrefabInstance(component) ? "prefab_override" : "scene_local",
                 ["scene_path"] = component.gameObject.scene.path,
                 ["scene_dirty"] = component.gameObject.scene.IsValid() && component.gameObject.scene.isDirty,
-                ["asset_dirty"] = EditorUtility.IsPersistent(component) && EditorUtility.GetDirtyCount(component) != 0,
+                ["asset_dirty"] = AssetDirty(component),
                 ["saved"] = false
             };
         }
@@ -291,6 +291,17 @@ namespace DccMcp.Unity
                     p.objectReferenceValue = reference; break;
                 default: throw new InvalidOperationException("Unsupported serialized property kind.");
             }
+        }
+
+        private static JToken AssetDirty(Component component)
+        {
+            if (!EditorUtility.IsPersistent(component)) return false;
+#if UNITY_2021_1_OR_NEWER
+            return EditorUtility.IsDirty(component);
+#else
+            // Legacy Editors expose no public asset dirty query. Unknown is not clean.
+            return JValue.CreateNull();
+#endif
         }
 
         private static Type ReferenceType(SerializedProperty property)
