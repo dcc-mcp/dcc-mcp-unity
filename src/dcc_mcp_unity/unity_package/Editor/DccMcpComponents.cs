@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using Newtonsoft.Json;
@@ -185,6 +186,8 @@ namespace DccMcp.Unity
 
         private static bool Writable(SerializedProperty p)
         {
+            if (p.serializedObject.targetObject is Transform &&
+                (p.propertyPath == "m_Father" || p.propertyPath.StartsWith("m_Children", StringComparison.Ordinal))) return false;
             if (!p.editable || p.propertyPath == "m_Script" || p.propertyPath == "m_GameObject" ||
                 p.propertyPath.StartsWith("m_Prefab", StringComparison.Ordinal) ||
                 p.propertyPath == "m_CorrespondingSourceObject" || p.propertyPath == "m_ObjectHideFlags") return false;
@@ -250,6 +253,7 @@ namespace DccMcp.Unity
                     if (value.Type != JTokenType.Integer && value.Type != JTokenType.Float) throw new InvalidOperationException("Expected number.");
                     var number = (double)value;
                     if (double.IsNaN(number) || double.IsInfinity(number)) throw new InvalidOperationException("Expected finite number.");
+                    if (p.type == "float" && Math.Abs(number) > float.MaxValue) throw new InvalidOperationException("Number exceeds float range.");
                     p.doubleValue = number; break;
                 case SerializedPropertyType.String:
                     if (value.Type != JTokenType.String || ((string)value).Length > 4096) throw new InvalidOperationException("Expected string up to 4096 characters.");
@@ -280,15 +284,41 @@ namespace DccMcp.Unity
                                 reference = AssetDatabase.LoadAssetAtPath<Sprite>(path);
                             if (reference == null) throw new InvalidOperationException("Asset not found.");
                         }
-                        var expected = p.type.Replace("PPtr<", "").Replace("$", "").TrimEnd('>');
-                        var compatible = false;
-                        for (var type = reference.GetType(); type != null; type = type.BaseType)
-                            if (type.Name == expected) compatible = true;
-                        if (!compatible) throw new InvalidOperationException("Incompatible object reference type.");
+                        var expected = ReferenceType(p);
+                        if (expected == null || !expected.IsInstanceOfType(reference))
+                            throw new InvalidOperationException("Incompatible or unresolved object reference type.");
                     }
                     p.objectReferenceValue = reference; break;
                 default: throw new InvalidOperationException("Unsupported serialized property kind.");
             }
+        }
+
+        private static Type ReferenceType(SerializedProperty property)
+        {
+            // Reflection reads declared metadata only. All writes remain SerializedProperty writes.
+            var type = property.serializedObject.targetObject.GetType();
+            var segments = property.propertyPath.Split('.');
+            for (var index = 0; index < segments.Length && type != null; index++)
+            {
+                if (segments[index] == "Array" && index + 1 < segments.Length &&
+                    segments[index + 1].StartsWith("data[", StringComparison.Ordinal))
+                {
+                    type = type.IsArray ? type.GetElementType() :
+                        type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>) ? type.GetGenericArguments()[0] : null;
+                    index++;
+                    continue;
+                }
+                FieldInfo field = null;
+                for (var owner = type; owner != null && field == null; owner = owner.BaseType)
+                    field = owner.GetField(segments[index], BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.DeclaredOnly);
+                type = field == null ? null : field.FieldType;
+            }
+            if (type != null && typeof(Object).IsAssignableFrom(type)) return type;
+            // Native serialized fields have no managed FieldInfo; resolve an exact Unity engine type.
+            var nativeName = property.type.Replace("PPtr<", "").Replace("$", "").TrimEnd('>');
+            var candidates = AppDomain.CurrentDomain.GetAssemblies().Select(a => a.GetType("UnityEngine." + nativeName, false))
+                .Where(t => t != null && typeof(Object).IsAssignableFrom(t)).Distinct().ToArray();
+            return candidates.Length == 1 ? candidates[0] : null;
         }
     }
 }

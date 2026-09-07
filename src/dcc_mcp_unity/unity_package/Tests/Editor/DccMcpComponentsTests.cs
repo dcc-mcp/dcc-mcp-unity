@@ -75,6 +75,43 @@ namespace DccMcp.Unity.Tests
             Assert.Throws<InvalidOperationException>(() => Add("Canvas"));
             Assert.Throws<InvalidOperationException>(() => DccMcpCommands.Execute("components.remove", new JObject { ["component_id"] = id }));
             Assert.Throws<InvalidOperationException>(() => DccMcpComponents.Inspect(new JObject { ["component_id"] = Guid.NewGuid().ToString("N") }));
+            Assert.Throws<InvalidOperationException>(() => Set(id, Value("m_Father", JValue.CreateNull())));
+        }
+        [Test]
+        public void ImageLayoutColorAndSpriteRoundTrip()
+        {
+            // Resolve UI by exact name, without adding a compile-time UGUI package dependency.
+            var uiAvailable = false;
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+                if (assembly.GetType("UnityEngine.UI.Image", false) != null) uiAvailable = true;
+            if (!uiAvailable) Assert.Ignore("UGUI is not installed in this test project.");
+            Add("UnityEngine.CanvasRenderer");
+            var image = Add("UnityEngine.UI.Image");
+            var id = (string)image["component_id"];
+            var result = Set(id, Value("m_Color", new JArray(0.1f, 0.2f, 0.3f, 0.4f)), Value("m_RaycastTarget", false));
+            Assert.That((bool)result["properties"][1]["value"], Is.False);
+            Assert.Throws<InvalidOperationException>(() => Set(id, Value("m_Sprite", new JObject { ["object_id"] = objectId })));
+            var texture = new Texture2D(4, 4);
+            try
+            {
+                System.IO.File.WriteAllBytes("Assets/DccMcpComponentSprite.png", texture.EncodeToPNG());
+                AssetDatabase.ImportAsset("Assets/DccMcpComponentSprite.png");
+                var importer = (TextureImporter)AssetImporter.GetAtPath("Assets/DccMcpComponentSprite.png");
+                importer.textureType = TextureImporterType.Sprite;
+                importer.spriteImportMode = SpriteImportMode.Single;
+                importer.SaveAndReimport();
+                var reference = Set(id, Value("m_Sprite", new JObject { ["asset_path"] = "Assets/DccMcpComponentSprite.png" }));
+                Assert.That((string)reference["properties"][0]["value"]["asset_path"], Is.EqualTo("Assets/DccMcpComponentSprite.png"));
+                Undo.PerformUndo();
+                var inspected = DccMcpComponents.Inspect(new JObject { ["component_id"] = id });
+                foreach (var property in (JArray)inspected["properties"])
+                    if ((string)property["path"] == "m_Sprite") Assert.That(property["value"].Type, Is.EqualTo(JTokenType.Null));
+            }
+            finally
+            {
+                UnityEngine.Object.DestroyImmediate(texture);
+                AssetDatabase.DeleteAsset("Assets/DccMcpComponentSprite.png");
+            }
         }
         [Test]
         public void RemovalCanBeUndoneAndDeadHandlesFail()
