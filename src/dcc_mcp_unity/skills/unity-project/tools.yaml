@@ -432,15 +432,18 @@ tools:
       additionalProperties: false
     output_schema:
       type: object
-    read_only: true
-    destructive: false
-    idempotent: true
     execution: async
     job_strategy: monolithic
     affinity: any
     enforce_thread_affinity: true
     timeout_hint_secs: 300
     source_file: scripts/enumerate_android_devices.py
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
   - name: install_android_apk
     description: Install the exact APK from a completed Unity build, then verify the
       installed base APK SHA-256. Reusing request_id returns the receipt without repeating
@@ -464,15 +467,18 @@ tools:
       additionalProperties: false
     output_schema:
       type: object
-    read_only: false
-    destructive: true
-    idempotent: true
     execution: async
     job_strategy: monolithic
     affinity: any
     enforce_thread_affinity: true
     timeout_hint_secs: 300
     source_file: scripts/install_android_apk.py
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
   - name: launch_android_package
     description: Launch the verified built package launcher activity on one authorized
       device. No arbitrary activity or shell command.
@@ -495,15 +501,18 @@ tools:
       additionalProperties: false
     output_schema:
       type: object
-    read_only: false
-    destructive: true
-    idempotent: true
     execution: async
     job_strategy: monolithic
     affinity: any
     enforce_thread_affinity: true
     timeout_hint_secs: 300
     source_file: scripts/launch_android_package.py
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
   - name: stop_android_package
     description: Stop the verified built package and check stopped state on one selected
       device.
@@ -526,15 +535,18 @@ tools:
       additionalProperties: false
     output_schema:
       type: object
-    read_only: false
-    destructive: true
-    idempotent: true
     execution: async
     job_strategy: monolithic
     affinity: any
     enforce_thread_affinity: true
     timeout_hint_secs: 300
     source_file: scripts/stop_android_package.py
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
   - name: grant_android_permission
     description: Grant one explicitly requested permission declared by the verified
       installed package and read back its granted state.
@@ -561,15 +573,18 @@ tools:
       additionalProperties: false
     output_schema:
       type: object
-    read_only: false
-    destructive: true
-    idempotent: true
     execution: async
     job_strategy: monolithic
     affinity: any
     enforce_thread_affinity: true
     timeout_hint_secs: 300
     source_file: scripts/grant_android_permission.py
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
   - name: read_android_logcat
     description: Capture bounded main-process Logcat for the verified built package,
       optionally waiting for a literal marker. Crash/ANR summary covers captured process
@@ -602,15 +617,18 @@ tools:
       additionalProperties: false
     output_schema:
       type: object
-    read_only: true
-    destructive: false
-    idempotent: true
     execution: async
     job_strategy: monolithic
     affinity: any
     enforce_thread_affinity: true
     timeout_hint_secs: 300
     source_file: scripts/read_android_logcat.py
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
   - name: capture_android_screenshot
     description: Capture a bounded PNG screenshot on the exact device after verifying
       the installed build. Return dimensions, bytes, SHA-256 and request-scoped artifact
@@ -634,15 +652,18 @@ tools:
       additionalProperties: false
     output_schema:
       type: object
-    read_only: true
-    destructive: false
-    idempotent: true
     execution: async
     job_strategy: monolithic
     affinity: any
     enforce_thread_affinity: true
     timeout_hint_secs: 300
     source_file: scripts/capture_android_screenshot.py
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
   - name: inspect_mobile_input
     description: Identify an uploaded game/project and return the Android or iOS test
       route without opening, extracting, installing, signing, or launching it. Supports
@@ -665,10 +686,13 @@ tools:
       additionalProperties: false
     output_schema:
       type: object
-    read_only: true
-    destructive: false
-    idempotent: true
     execution: sync
     affinity: any
     enforce_thread_affinity: true
     source_file: scripts/inspect_mobile_input.py
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
