@@ -57,6 +57,11 @@ namespace DccMcp.Unity
                     case "jobs.inspect":
                         result = DccMcpJobs.Inspect(parameters);
                         break;
+                    case "components.list": result = DccMcpComponents.List(parameters); break;
+                    case "components.inspect": result = DccMcpComponents.Inspect(parameters); break;
+                    case "components.add": result = DccMcpComponents.Add(parameters); break;
+                    case "components.remove": result = DccMcpComponents.Remove(parameters); break;
+                    case "components.set": result = DccMcpComponents.Set(parameters); break;
                     case "scene.inspect":
                         result = InspectScene(parameters);
                         break;
@@ -85,6 +90,7 @@ namespace DccMcp.Unity
                 if (undoable)
                 {
                     Undo.SetCurrentGroupName("DCC-MCP: " + method);
+                    Undo.FlushUndoRecordObjects();
                     Undo.CollapseUndoOperations(undoGroup);
                 }
                 return result;
@@ -101,12 +107,13 @@ namespace DccMcp.Unity
 
         private static bool IsUndoable(string method)
         {
-            return method == "scene.create_game_object" || method == "scene.set_transform";
+            return method == "scene.create_game_object" || method == "scene.set_transform"
+                || method == "components.add" || method == "components.remove" || method == "components.set";
         }
 
         private static void EnsureEditorReady(string method)
         {
-            var mutating = method == "assets.refresh"
+            var mutating = IsUndoable(method) || method == "assets.refresh"
                 || method == "assets.configure_sprite"
                 || method == "scene.create_game_object"
                 || method == "scene.set_transform"

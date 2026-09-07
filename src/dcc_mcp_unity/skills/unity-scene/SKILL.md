@@ -27,3 +27,21 @@ creation and transform edits register with Unity Undo.
 
 Do not automatically retry a timed-out mutation. Inspect the project and scene first because the
 Editor may have completed the original request near the timeout boundary.
+
+## Component authoring
+
+Call `list_components` with a fresh hierarchy ID. Its `object_id` and `component_id`
+handles expire on domain reload or object destruction. Add by fully qualified type
+name; inspect the component before setting exact serialized property paths. Supply
+`expected_fingerprint` to reject concurrent edits. Values support booleans, integers,
+floats, strings, enum indices, vectors, colors, rectangles, bounds, and compatible
+object references (`object_id` or an exact `Assets/` path). Existing nested fields
+and array elements use Unity property paths; array resizing, curves, managed
+references, event wiring, and direct prefab asset edits are unsupported in this
+iteration. Unsupported fields are marked non-editable.
+
+Batches validate in a SerializedObject before applying and use the command Undo
+transaction for failures. Project component lifecycle callbacks can have their own
+external side effects; Undo cannot roll those back. Results include normalized
+readback and scene/prefab override state. No operation saves content. Review dirty
+scenes before the existing `save_scene`, which saves all open scenes.
