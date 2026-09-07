@@ -30,6 +30,8 @@ def _load_script(skill: str, name: str):
     ("skill", "name", "method", "arguments"),
     [
         ("unity-project", "read_text_asset", "assets.read_text", {"path": "Assets/Game.cs"}),
+        ("unity-scene", "list_components", "components.list", {"instance_id": -123}),
+        ("unity-scene", "list_components", "components.list", {"instance_id": "123"}),
         (
             "unity-project",
             "configure_sprite_importer",
@@ -508,3 +510,12 @@ def test_source_write_security_contract_bounds_external_writer_and_reparse_races
     assert "cooperative" in documentation
     assert "same-user" in documentation
     assert "conflict backup" in documentation
+
+
+def test_component_listing_accepts_unmodified_legacy_and_modern_ids():
+    tools = yaml.safe_load((SKILLS / "unity-scene/tools.yaml").read_text())["tools"]
+    schema = next(tool["input_schema"] for tool in tools if tool["name"] == "list_components")
+    validator = Draft7Validator(schema)
+    assert validator.is_valid({"instance_id": -123})
+    assert validator.is_valid({"instance_id": "18446744073709551615"})
+    assert not validator.is_valid({"instance_id": "name matching"})
