@@ -12,7 +12,7 @@ metadata:
     dcc: unity
     layer: domain
     version: "0.13.0"  # x-release-please-version
-    search-hint: "Unity scene hierarchy GameObject transform save Undo"
+    search-hint: "Unity scene hierarchy GameObject transform save Undo prefab assets dependencies"
     tags: "unity,scene,gameobject,transform,game-development"
     tools: tools.yaml
     depends: "dcc-diagnostics"
@@ -45,3 +45,19 @@ transaction for failures. Project component lifecycle callbacks can have their o
 external side effects; Undo cannot roll those back. Results include normalized
 readback and scene/prefab override state. No operation saves content. Review dirty
 scenes before the existing `save_scene`, which saves all open scenes.
+
+## Reuse local assets
+
+Use `find_assets` within Assets or installed Packages, then `inspect_asset` for
+identity and recursive dependency paths. Results are bounded and indicate truncation.
+Project and UPM assets are distinguished; their presence does not prove licensing.
+These tools do not search or purchase Asset Store products, install packages, import
+archives, execute downloaded code, or generate visual previews.
+
+Save any untitled scene to an explicit path first; Unity cannot add scenes beside it.
+For a separate layout, call `create_isolated_scene`, then `instantiate_prefab` with
+its scene handle and the asset's current dependency hash. Use returned object IDs
+with `set_transform` to arrange instances. Save only that scene with `save_exact_scene`
+to an existing Assets folder. `reopen_exact_scene` refuses dirty scenes and reads the
+saved scene from disk; use its new handle and fresh hierarchy IDs afterward.
+Keep another scene loaded during reopen. Never automatically retry mutations.

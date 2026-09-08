@@ -30,6 +30,10 @@ def _load_script(skill: str, name: str):
     ("skill", "name", "method", "arguments"),
     [
         ("unity-project", "read_text_asset", "assets.read_text", {"path": "Assets/Game.cs"}),
+        ("unity-scene", "find_assets", "assets.find", {"root": "Assets", "limit": 10}),
+        ("unity-scene", "inspect_asset", "assets.inspect", {"path": "Assets/A.prefab"}),
+        ("unity-scene", "create_isolated_scene", "scene.create_isolated", {}),
+        ("unity-scene", "reopen_exact_scene", "scene.reopen_exact", {"scene_handle": 42}),
         ("unity-scene", "list_components", "components.list", {"instance_id": -123}),
         ("unity-scene", "list_components", "components.list", {"instance_id": "123"}),
         (

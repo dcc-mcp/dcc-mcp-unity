@@ -39,6 +39,12 @@ namespace DccMcp.Unity
                     case "project.inspect":
                         result = InspectProject();
                         break;
+                    case "assets.find": result = DccMcpAssetReuse.Find(parameters); break;
+                    case "assets.inspect": result = DccMcpAssetReuse.Inspect(parameters); break;
+                    case "scene.instantiate_prefab": result = DccMcpAssetReuse.Instantiate(parameters); break;
+                    case "scene.create_isolated": result = DccMcpAssetReuse.CreateScene(); break;
+                    case "scene.save_exact": result = DccMcpAssetReuse.SaveScene(parameters); break;
+                    case "scene.reopen_exact": result = DccMcpAssetReuse.ReopenScene(parameters); break;
                     case "assets.refresh":
                         result = RefreshAssets();
                         break;
@@ -110,13 +116,14 @@ namespace DccMcp.Unity
 
         private static bool IsUndoable(string method)
         {
-            return method == "scene.create_game_object" || method == "scene.set_transform"
+            return method == "scene.instantiate_prefab" || method == "scene.create_game_object" || method == "scene.set_transform"
                 || method == "components.add" || method == "components.remove" || method == "components.set";
         }
 
         private static void EnsureEditorReady(string method)
         {
-            var mutating = IsUndoable(method) || method == "assets.refresh"
+            var mutating = method == "scene.create_isolated" || method == "scene.save_exact"
+                || method == "scene.reopen_exact" || IsUndoable(method) || method == "assets.refresh"
                 || method == "assets.configure_sprite"
                 || method == "scene.create_game_object"
                 || method == "scene.set_transform"
@@ -285,6 +292,7 @@ namespace DccMcp.Unity
             return new JObject
             {
                 ["scene_name"] = scene.name,
+                ["scene_handle"] = scene.handle,
                 ["scene_path"] = scene.path,
                 ["dirty"] = scene.isDirty,
                 ["roots"] = roots,
