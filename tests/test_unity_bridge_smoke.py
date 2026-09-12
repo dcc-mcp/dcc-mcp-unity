@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pytest
 from dcc_mcp_core import BridgeConnectionError
+from dcc_mcp_core.bridge import BridgeRpcError
 
 from tools import unity_bridge_smoke
 
@@ -14,7 +15,15 @@ class FakeBridge:
 
 def test_bridge_smoke_records_verified_editor(monkeypatch, tmp_path: Path):
     stopped = []
+    probes = []
     monkeypatch.setattr(unity_bridge_smoke, "start_bridge", FakeBridge)
+
+    def expired_probe(deadline):
+        probes.append(deadline)
+        raise BridgeRpcError(-32002, "expired before main-thread execution")
+
+    monkeypatch.setattr(unity_bridge_smoke, "probe_host_dispatch", expired_probe)
+    monkeypatch.setattr(unity_bridge_smoke, "set_host_dispatch_ready", lambda _ready: None)
     monkeypatch.setattr(
         unity_bridge_smoke,
         "call_host",
@@ -36,6 +45,7 @@ def test_bridge_smoke_records_verified_editor(monkeypatch, tmp_path: Path):
     assert result["engine_version"] == "6000.5.4f1"
     assert result["project_name"] == "CI Project"
     assert json.loads(ready.read_text(encoding="utf-8"))["status"] == "listening"
+    assert probes == [1.0]
     assert stopped == [True]
 
 
@@ -49,6 +59,8 @@ def test_bridge_smoke_retries_transient_disconnect(monkeypatch, tmp_path: Path):
         return {"engine_version": "2021.3.45f1", "name": "CI Project"}
 
     monkeypatch.setattr(unity_bridge_smoke, "start_bridge", FakeBridge)
+    monkeypatch.setattr(unity_bridge_smoke, "probe_host_dispatch", lambda _deadline: None)
+    monkeypatch.setattr(unity_bridge_smoke, "set_host_dispatch_ready", lambda _ready: None)
     monkeypatch.setattr(unity_bridge_smoke, "call_host", call_host)
     monkeypatch.setattr(unity_bridge_smoke, "stop_bridge", lambda: None)
     monkeypatch.setattr(unity_bridge_smoke.time, "sleep", lambda _seconds: None)
@@ -66,6 +78,8 @@ def test_bridge_smoke_retries_transient_disconnect(monkeypatch, tmp_path: Path):
 
 def test_bridge_smoke_rejects_wrong_editor_version(monkeypatch, tmp_path: Path):
     monkeypatch.setattr(unity_bridge_smoke, "start_bridge", FakeBridge)
+    monkeypatch.setattr(unity_bridge_smoke, "probe_host_dispatch", lambda _deadline: None)
+    monkeypatch.setattr(unity_bridge_smoke, "set_host_dispatch_ready", lambda _ready: None)
     monkeypatch.setattr(
         unity_bridge_smoke,
         "call_host",

@@ -1,0 +1,75 @@
+name: Tuanjie Engine Validation
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, "release-please--branches--**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Tuanjie Engine (团结引擎) is Unity's China-market fork based on Unity 2022.3 LTS.
+# No public Docker images exist for Tuanjie (unityci/editor only covers standard Unity).
+# Real Editor tests require a Tuanjie-licensed environment; until a container image is
+# available, this workflow validates Tuanjie compatibility at the package level.
+#
+# Editor-level proxy coverage is provided by the Unity 2021.3 job in unity.yml,
+# which exercises the same C# preprocessor path (no UNITY_6000_5_OR_NEWER) and
+# the same Unity API surface that Tuanjie 1.x inherits from Unity 2022.3.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tuanjie-version-matrix:
+    name: Tuanjie ${{ matrix.label }} / Version validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: "1.5"
+            editor-version: "2022.3.47t1"
+          - label: "1.6"
+            editor-version: "2022.3.53t2"
+          - label: "1.7"
+            editor-version: "2022.3.58t5"
+          - label: "1.9"
+            editor-version: "2022.3.62t11"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install package
+        run: python -m pip install -e ".[dev]"
+      - name: Verify Tuanjie ${{ matrix.label }} version parsing
+        shell: bash
+        env:
+          EXPECTED_VERSION: ${{ matrix.editor-version }}
+        run: |
+          python -c "
+          from pathlib import Path
+          import tempfile, os
+
+          tmp = Path(tempfile.mkdtemp())
+          (tmp / 'Assets').mkdir()
+          (tmp / 'ProjectSettings').mkdir()
+          (tmp / 'ProjectSettings' / 'ProjectVersion.txt').write_text(
+              'm_EditorVersion: $EXPECTED_VERSION\n', encoding='utf-8')
+
+          from dcc_mcp_unity.install import install_package, read_unity_version
+          assert read_unity_version(tmp) == '$EXPECTED_VERSION', \
+              f'Version mismatch: {read_unity_version(tmp)} != $EXPECTED_VERSION'
+          target = install_package(tmp)
+          assert target.is_dir(), f'Install failed for $EXPECTED_VERSION'
+          assert (target / 'Editor' / 'DccMcpBridge.cs').is_file(), \
+              'Bridge file missing after install'
+          print(f'Tuanjie ${{ matrix.label }} ($EXPECTED_VERSION): package validated')
+          "
+      - name: Run Tuanjie-specific pytest
+        run: python -m pytest tests/test_install.py -v -k "tuanjie" --tb=short

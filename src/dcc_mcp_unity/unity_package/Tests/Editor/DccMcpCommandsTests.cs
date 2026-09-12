@@ -12,6 +12,7 @@ namespace DccMcp.Unity.Tests
 {
     public sealed class DccMcpCommandsTests
     {
+        private const int MaxJobPollFrames = 600;
         private const string SourceWriteGate = "DCC_MCP_UNITY_ALLOW_SOURCE_WRITES";
         private string originalJobStore;
         private string originalSourceWriteGate;
@@ -53,7 +54,7 @@ namespace DccMcp.Unity.Tests
                     Directory.Delete(testDirectory, true);
                 }
             }
-            AssetDatabase.Refresh();
+            AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
         }
 
         [Test]
@@ -161,6 +162,78 @@ namespace DccMcp.Unity.Tests
         }
 
         [Test]
+        public void HostPingProvesTheEditorUpdateLoopIsDispatching()
+        {
+            var result = DccMcpCommands.Execute("host.ping", new JObject());
+
+            Assert.That((bool)result["host_dispatch_ready"], Is.True);
+        }
+
+        [Test]
+        public void ConfigureSpriteImporterUsesTypedProjectScopedSettings()
+        {
+            const string assetPath = "Assets/DccMcpJobTests/FrostSpear.png";
+            var directory = Path.Combine(Application.dataPath, "DccMcpJobTests");
+            Directory.CreateDirectory(directory);
+            var texture = new Texture2D(2, 2, TextureFormat.RGBA32, false);
+            texture.SetPixels(new[] { Color.clear, Color.white, Color.white, Color.clear });
+            texture.Apply();
+            File.WriteAllBytes(Path.Combine(directory, "FrostSpear.png"), texture.EncodeToPNG());
+            UnityEngine.Object.DestroyImmediate(texture);
+
+            var result = DccMcpCommands.Execute(
+                "assets.configure_sprite",
+                new JObject
+                {
+                    ["path"] = assetPath,
+                    ["pixels_per_unit"] = 128,
+                    ["filter_mode"] = "point",
+                });
+
+            var importer = AssetImporter.GetAtPath(assetPath) as TextureImporter;
+            Assert.That(importer, Is.Not.Null);
+            Assert.That(importer.textureType, Is.EqualTo(TextureImporterType.Sprite));
+            Assert.That(importer.spriteImportMode, Is.EqualTo(SpriteImportMode.Single));
+            Assert.That(importer.spritePixelsPerUnit, Is.EqualTo(128));
+            Assert.That(importer.mipmapEnabled, Is.False);
+            Assert.That(importer.alphaIsTransparency, Is.True);
+            Assert.That(importer.wrapMode, Is.EqualTo(TextureWrapMode.Clamp));
+            Assert.That(importer.filterMode, Is.EqualTo(FilterMode.Point));
+            Assert.That((bool)result["configured"], Is.True);
+            Assert.That((string)result["path"], Is.EqualTo(assetPath));
+            Assert.That((string)result["filter_mode"], Is.EqualTo("point"));
+
+            Assert.That(
+                () => DccMcpCommands.Execute(
+                    "assets.configure_sprite",
+                    new JObject { ["path"] = "Assets/../ProjectSettings/icon.png" }),
+                Throws.TypeOf<InvalidOperationException>());
+            Assert.That(
+                () => DccMcpCommands.Execute(
+                    "assets.configure_sprite",
+                    new JObject { ["path"] = "Assets/DccMcpJobTests/Probe.jpg" }),
+                Throws.TypeOf<InvalidOperationException>());
+            Assert.That(
+                () => DccMcpCommands.Execute(
+                    "assets.configure_sprite",
+                    new JObject
+                    {
+                        ["path"] = assetPath,
+                        ["pixels_per_unit"] = 0,
+                    }),
+                Throws.TypeOf<InvalidOperationException>());
+            Assert.That(
+                () => DccMcpCommands.Execute(
+                    "assets.configure_sprite",
+                    new JObject
+                    {
+                        ["path"] = assetPath,
+                        ["filter_mode"] = "trilinear",
+                    }),
+                Throws.TypeOf<InvalidOperationException>());
+        }
+
+        [Test]
         public void JobSubmissionRejectsUnknownInputsUtf8OverflowAndConcurrency()
         {
             Environment.SetEnvironmentVariable(SourceWriteGate, "1");
@@ -199,6 +272,34 @@ namespace DccMcp.Unity.Tests
                     new JObject { ["request_id"] = Guid.NewGuid().ToString("D") }),
                 Throws.TypeOf<InvalidOperationException>()
                     .With.Message.Contains("queued or running"));
+        }
+
+        [Test]
+        public void AndroidBuildSubmissionAcceptsOnlyTypedArtifactKinds()
+        {
+            Assert.That(
+                () => DccMcpCommands.Execute(
+                    "project.build_android_player",
+                    new JObject
+                    {
+                        ["request_id"] = Guid.NewGuid().ToString("D"),
+                        ["artifact_kind"] = "zip",
+                    }),
+                Throws.TypeOf<InvalidOperationException>()
+                    .With.Message.Contains("apk or aab"));
+
+            var requestId = Guid.NewGuid().ToString("D");
+            var submitted = DccMcpCommands.Execute(
+                "project.build_android_player",
+                new JObject
+                {
+                    ["request_id"] = requestId,
+                    ["artifact_kind"] = "apk",
+                });
+
+            Assert.That((string)submitted["request_id"], Is.EqualTo(requestId));
+            Assert.That((string)submitted["kind"], Is.EqualTo("project.build_android_player"));
+            Assert.That((string)submitted["state"], Is.EqualTo("queued"));
         }
 
         [Test]
@@ -292,12 +393,55 @@ namespace DccMcp.Unity.Tests
             }
             finally
             {
-                DccMcpTestFrameworkBridge.ReleaseCallback(requestId);
+                DccMcpTestFrameworkBridge.ReleaseCallback(requestId, reportPath);
             }
 
             Assert.That(
                 DccMcpTestFrameworkBridge.IsCallbackRegistered(requestId),
                 Is.False);
+        }
+
+        [Test]
+        public void TestRunnerCallbackRegistrationKeepsOnlyActiveRequest()
+        {
+            var firstRequestId = Guid.NewGuid().ToString("D");
+            var secondRequestId = Guid.NewGuid().ToString("D");
+            var projectPath = Path.GetDirectoryName(Application.dataPath) ?? string.Empty;
+            var firstReportPath = Path.Combine(
+                projectPath,
+                "Builds",
+                "DccMcp",
+                "Tests",
+                firstRequestId,
+                "results.xml");
+            var secondReportPath = Path.Combine(
+                projectPath,
+                "Builds",
+                "DccMcp",
+                "Tests",
+                secondRequestId,
+                "results.xml");
+
+            try
+            {
+                DccMcpTestFrameworkBridge.EnsureCallback(firstRequestId, firstReportPath);
+                DccMcpTestFrameworkBridge.EnsureCallback(secondRequestId, secondReportPath);
+
+                Assert.That(
+                    DccMcpTestFrameworkBridge.IsCallbackRegistered(
+                        firstRequestId,
+                        firstReportPath),
+                    Is.False);
+                Assert.That(
+                    DccMcpTestFrameworkBridge.IsCallbackRegistered(
+                        secondRequestId,
+                        secondReportPath),
+                    Is.True);
+            }
+            finally
+            {
+                DccMcpTestFrameworkBridge.ReleaseCallback(secondRequestId, secondReportPath);
+            }
         }
 
         [Test]
@@ -615,7 +759,7 @@ namespace DccMcp.Unity.Tests
             Assert.That((string)submitted["state"], Is.EqualTo("queued"));
 
             JObject status = null;
-            for (var frame = 0; frame < 10; frame++)
+            for (var frame = 0; frame < MaxJobPollFrames; frame++)
             {
                 yield return null;
                 status = DccMcpCommands.Execute(
@@ -639,7 +783,7 @@ namespace DccMcp.Unity.Tests
             update["content"] = "updated text\n";
             update["expected_sha256"] = read["sha256"].DeepClone();
             DccMcpCommands.Execute("assets.upsert_text", update);
-            for (var frame = 0; frame < 10; frame++)
+            for (var frame = 0; frame < MaxJobPollFrames; frame++)
             {
                 yield return null;
                 status = DccMcpCommands.Execute(
@@ -663,7 +807,7 @@ namespace DccMcp.Unity.Tests
             staleCreate["request_id"] = Guid.NewGuid().ToString("D");
             var staleSubmitted = DccMcpCommands.Execute("assets.upsert_text", staleCreate);
             Assert.That((string)staleSubmitted["state"], Is.EqualTo("queued"));
-            for (var frame = 0; frame < 10; frame++)
+            for (var frame = 0; frame < MaxJobPollFrames; frame++)
             {
                 yield return null;
                 status = DccMcpCommands.Execute(
@@ -712,6 +856,46 @@ namespace DccMcp.Unity.Tests
                 () => DccMcpCommands.Execute("tuanjie_ai.execute", new JObject()),
                 Throws.TypeOf<InvalidOperationException>()
                     .With.Message.EqualTo("tool_name is required."));
+        }
+
+        [Test]
+        public void TuanjieAiUsesTheNativeCustomToolRegistry()
+        {
+            var names = DccMcpTuanjieAi.DiscoverRegisteredToolNames(typeof(FakeTuanjieBridge));
+            CollectionAssert.AreEqual(new[] { "official_tool", "third_party_tool" }, names);
+
+            var descriptions = DccMcpTuanjieAi.DiscoverRegisteredToolDescriptions(
+                typeof(FakeTuanjieBridge),
+                names);
+            Assert.That((string)descriptions["official_tool"], Is.EqualTo("Official tool guidance"));
+            Assert.That(descriptions["third_party_tool"].Type, Is.EqualTo(JTokenType.Null));
+        }
+
+        private static class FakeTuanjieBridge
+        {
+            [AttributeUsage(AttributeTargets.Method)]
+            public sealed class CustomToolAttribute : Attribute
+            {
+                public string Name { get; }
+                public string Description { get; }
+
+                public CustomToolAttribute(string name, string description = null)
+                {
+                    Name = name;
+                    Description = description;
+                }
+            }
+
+            public static string[] GetRegisteredTools()
+            {
+                return new[] { "third_party_tool", "official_tool" };
+            }
+
+            [CustomTool("official_tool", "Official tool guidance")]
+            public static object OfficialTool(JObject parameters)
+            {
+                return parameters;
+            }
         }
 
         private sealed class ThrowingReadStream : MemoryStream

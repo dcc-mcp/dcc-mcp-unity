@@ -38,14 +38,23 @@ def test_server_readiness_monitor_tracks_unity_bridge_connection(monkeypatch):
         def is_connected(self):
             return connected.is_set()
 
+        def call(self, *_args, **_kwargs):
+            return {"host_dispatch_ready": True}
+
     monkeypatch.setattr(server_module, "get_bridge", FakeBridge)
+    monkeypatch.setattr(
+        server_module,
+        "probe_host_dispatch",
+        lambda _deadline: {"host_dispatch_ready": True},
+    )
     monkeypatch.setattr(server_module, "_READINESS_POLL_SECONDS", 0.001)
+    monkeypatch.setattr(server_module, "_BRIDGE_DISCONNECT_GRACE_SECONDS", 0)
     server = UnityMcpServer(port=0)
     set_readiness = server._set_bridge_readiness
 
-    def record_transition(ready):
-        set_readiness(ready)
-        transitioned[ready].set()
+    def record_transition(transport_ready, host_dispatch_ready):
+        set_readiness(transport_ready, host_dispatch_ready)
+        transitioned[host_dispatch_ready].set()
 
     monkeypatch.setattr(server, "_set_bridge_readiness", record_transition)
     try:
@@ -76,6 +85,83 @@ def test_server_readiness_monitor_tracks_unity_bridge_connection(monkeypatch):
         assert transitioned[False].wait(timeout=1.0)
         assert server._readiness.report_subset()["dcc"] is False
     finally:
+        server.stop()
+
+
+def test_server_readiness_graces_brief_bridge_disconnect(monkeypatch):
+    clock = [100.0]
+
+    class FakeBridge:
+        connected = True
+
+        def is_connected(self):
+            return self.connected
+
+        def call(self, *_args, **_kwargs):
+            return {"host_dispatch_ready": True}
+
+    bridge = FakeBridge()
+    monkeypatch.setattr(server_module, "get_bridge", lambda: bridge)
+    monkeypatch.setattr(
+        server_module,
+        "probe_host_dispatch",
+        lambda _deadline: {"host_dispatch_ready": True},
+    )
+    monkeypatch.setattr(server_module.time, "monotonic", lambda: clock[0])
+    server = UnityMcpServer(port=0)
+    try:
+        assert server._sync_bridge_readiness() is True
+        server._host_probe_thread.join(timeout=1.0)
+        assert server._sync_bridge_readiness() is True
+        assert server._readiness.report_subset()["dcc"] is True
+
+        bridge.connected = False
+        assert server._sync_bridge_readiness() is True
+        clock[0] += 4.9
+        assert server._sync_bridge_readiness() is True
+        assert server._readiness.report_subset()["dcc"] is True
+
+        clock[0] += 0.2
+        assert server._sync_bridge_readiness() is False
+        assert server._readiness.report_subset()["dcc"] is False
+    finally:
+        server.stop()
+
+
+def test_server_detects_blocked_host_while_transport_stays_ready(monkeypatch):
+    clock = [100.0]
+    release_blocked_probe = threading.Event()
+    probe_calls = [0]
+
+    class FakeBridge:
+        def is_connected(self):
+            return True
+
+    def probe(_deadline):
+        probe_calls[0] += 1
+        if probe_calls[0] > 1:
+            release_blocked_probe.wait(timeout=1.0)
+
+    monkeypatch.setattr(server_module, "get_bridge", FakeBridge)
+    monkeypatch.setattr(server_module, "probe_host_dispatch", probe)
+    monkeypatch.setattr(server_module.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(server_module, "_HOST_PROBE_STALE_SECONDS", 0.02)
+    server = UnityMcpServer(port=0)
+    try:
+        server._run_host_probe()
+        assert server._sync_bridge_readiness() is True
+        assert server._host_dispatch_ready is True
+
+        clock[0] += 0.03
+        assert server._sync_bridge_readiness() is True
+        report = server._readiness.report_subset()
+        assert report["dispatcher"] is True
+        assert report["host_execution_bridge"] is True
+        assert report["main_thread_executor"] is True
+        assert report["dcc"] is True
+        assert server._host_dispatch_ready is False
+    finally:
+        release_blocked_probe.set()
         server.stop()
 
 
@@ -115,6 +201,7 @@ def test_bundled_skills_release_and_upm_package_exist():
     assert test_assembly["optionalUnityReferences"] == ["TestAssemblies"]
     assert (PACKAGE / "Tests" / "Editor" / "DccMcpCommandsTests.cs").is_file()
     assert (PACKAGE / "Editor" / "DccMcpJobs.cs").is_file()
+    assert (PACKAGE / "Editor" / "DccMcpBootstrapErrors.cs").is_file()
 
     legacy_project = ROOT / "tests" / "unity-2018-project"
     legacy_manifest = json.loads(
@@ -214,6 +301,26 @@ def test_unity_bridge_network_awaits_do_not_capture_editor_context():
     assert bridge.index("Debug.Log(log.Message)") > bridge.index("OnEditorUpdate()")
 
 
+def test_text_asset_jobs_wait_for_transient_editor_updates():
+    jobs = (PACKAGE / "Editor" / "DccMcpJobs.cs").read_text(encoding="utf-8")
+    advance_upsert = jobs[jobs.index("private static void AdvanceUpsert") :]
+    next_method = advance_upsert.index("internal static void ReplaceExistingFileWithCas")
+    advance_upsert = advance_upsert[:next_method]
+
+    assert "TimedOut(job, TimeSpan.FromMinutes(10))" in advance_upsert
+    assert "EditorApplication.isCompiling || EditorApplication.isUpdating" in advance_upsert
+    assert advance_upsert.index("EditorApplication.isCompiling") < advance_upsert.index(
+        "AcquireAssetWriteLock"
+    )
+
+
+def test_unity_test_cleanup_finishes_asset_refresh_synchronously():
+    tests = (PACKAGE / "Tests" / "Editor" / "DccMcpCommandsTests.cs").read_text(encoding="utf-8")
+
+    assert "AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);" in tests
+    assert "MaxJobPollFrames = 600" in tests
+
+
 def test_initialize_on_load_classes_guard_against_import_workers():
     editor_dir = PACKAGE / "Editor"
     initialize_on_load_files = [
@@ -230,6 +337,31 @@ def test_initialize_on_load_classes_guard_against_import_workers():
         assert "IsImportWorkerOrBatchMode" in text, (
             f"{source.name} is missing IsImportWorkerOrBatchMode guard in its static constructor"
         )
+
+
+def test_initialize_on_load_classes_capture_bootstrap_errors():
+    editor_dir = PACKAGE / "Editor"
+    for name in ("DccMcpBridge.cs", "DccMcpJobs.cs", "DccMcpConsole.cs"):
+        source = (editor_dir / name).read_text(encoding="utf-8")
+        assert "DccMcpBootstrapErrors.Capture" in source
+    capture = (editor_dir / "DccMcpBootstrapErrors.cs").read_text(encoding="utf-8")
+    assert '"bootstrap-errors.jsonl"' in capture
+    assert '["schema_version"] = "1"' in capture
+
+
+def test_unity_menu_unifies_dcc_mcp_entry_points():
+    menu = (PACKAGE / "Editor" / "DccMcpMenu.cs").read_text(encoding="utf-8")
+    assert 'MenuItem("DCC MCP/Copy Instance ID"' in menu
+    assert 'MenuItem("DCC MCP/Server Info"' in menu
+    assert 'MenuItem("DCC MCP/About DCC MCP"' in menu
+    assert "GUIUtility.systemCopyBuffer" in menu
+    assert "GetSessionInstanceId" in menu
+    assert "EditorUtility.DisplayDialog" in menu
+    assert "dcc-mcp-unity v" in menu
+    assert "DCC MCP — Server Info" in menu
+    assert "About DCC MCP" in menu or '"About DCC MCP"' in menu
+    assert "Instance UUID" in menu
+    assert "Bridge URL" in menu
 
 
 def test_scene_tools_treat_unity_object_ids_as_opaque_values():
@@ -277,6 +409,13 @@ def test_runtime_version_matches_distribution_metadata():
     assert __version__ == project_version.group(1)
     upm_package = json.loads((PACKAGE / "package.json").read_text(encoding="utf-8"))
     assert __version__ == upm_package["version"]
+    menu = (PACKAGE / "Editor" / "DccMcpMenu.cs").read_text(encoding="utf-8")
+    menu_version = re.search(
+        r'AdapterVersion = "([^"]+)"; // x-release-please-version',
+        menu,
+    )
+    assert menu_version is not None
+    assert __version__ == menu_version.group(1)
     for skill in (ROOT / "src" / "dcc_mcp_unity" / "skills").iterdir():
         if skill.is_dir():
             skill_text = (skill / "SKILL.md").read_text(encoding="utf-8")
@@ -296,6 +435,7 @@ def test_runtime_version_matches_distribution_metadata():
     extra_paths = {item["path"] for item in release_config["packages"]["."]["extra-files"]}
     assert {
         "src/dcc_mcp_unity/unity_package/package.json",
+        "src/dcc_mcp_unity/unity_package/Editor/DccMcpMenu.cs",
         "src/dcc_mcp_unity/skills/unity-project/SKILL.md",
         "src/dcc_mcp_unity/skills/unity-scene/SKILL.md",
         "src/dcc_mcp_unity/skills/unity-diagnostics/SKILL.md",
@@ -317,6 +457,9 @@ def test_tuanjie_ai_skill_reuses_optional_native_custom_tools():
     assert "requests" not in inspect_script + execute_script
     assert "UnityTcp.CustomTool" in host
     assert "ExecuteCustomTool" in host
+    assert "GetRegisteredTools" in host
+    assert '"tool_descriptions"' in host
+    assert "CustomToolAttribute" in host
     assert "System.Net" not in host
     assert 'case "tuanjie_ai.inspect"' in commands
     assert 'case "tuanjie_ai.execute"' in commands

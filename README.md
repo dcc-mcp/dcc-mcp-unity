@@ -5,18 +5,17 @@
 Unity Editor adapter for the DCC Model Context Protocol ecosystem. It ships a UPM Editor package,
 a loopback WebSocket bridge, and typed project, scene, build, and diagnostic tools.
 
-The supported Editor range starts at Unity 2018.4.25f1 with the .NET 4.x Equivalent scripting
-runtime. CI pins that Unity 2018 baseline, the 2021.3 baseline, and the current stable Unity 6
-release instead of using a drifting `latest` tag.
-
-The first-release boundary and comparison with `unity-cli` and two established Unity MCP projects
-are documented in the [architecture benchmark](https://github.com/dcc-mcp/dcc-mcp-unity/blob/main/docs/architecture-benchmark.md).
+The adapter supports all Unity Editor versions from Unity 2018.4.25f1 onwards, covering every
+2018–2024 LTS release and Unity 6. CI pins the 2018 baseline, the 2021.3 baseline, and the
+current stable Unity 6 release instead of using a drifting `latest` tag. The .NET 4.x Equivalent
+scripting runtime is required when using Unity 2018.4.
 
 ## Install
 
 ```bash
 pip install dcc-mcp-unity
-dcc-mcp-unity-install /path/to/UnityProject
+dcc-mcp-unity install --project /path/to/UnityProject --dry-run
+dcc-mcp-unity install --project /path/to/UnityProject --yes
 ```
 
 Open or restart the Unity project so Package Manager compiles **DCC-MCP Unity**, then run:
@@ -26,7 +25,8 @@ dcc-mcp-unity
 ```
 
 See the [installation guide](https://github.com/dcc-mcp/dcc-mcp-unity/blob/main/install.md) for
-upgrade, environment, and connection verification details.
+JSON output, verification, upgrade, uninstall, rollback, and troubleshooting details. The legacy
+`dcc-mcp-unity-install` entry point remains available during migration.
 
 The MCP endpoint uses a free loopback port and is registered for gateway discovery. Set
 `DCC_MCP_UNITY_PORT=8765` before starting the server only when a fixed direct endpoint is needed.
@@ -35,12 +35,12 @@ The Editor package reconnects to the loopback bridge at `ws://127.0.0.1:3852`; s
 to override it. `DCC_MCP_UNITY_BRIDGE_TIMEOUT` may increase the 60-second RPC timeout but cannot
 lower it; queued Editor work expires first so timed-out mutations are not executed later.
 
-The live tool surface includes project readiness and asset search, bounded source reads and
-compare-and-swap writes, scene hierarchy inspection, per-GameObject component inspection,
-undoable GameObject creation/deletion and transform edits, scene saves, Console reads, Play Mode,
-Game View capture, Unity Test Framework runs, and Windows player builds. Asset search returns GUID,
-path, and main asset type; component inspection intentionally reports stable type/state metadata
-without exposing an unconstrained serialized-property writer.
+Transport connection does not imply that Unity's Editor update loop is responsive. The adapter
+probes that loop separately; when a native modal dialog blocks it, subsequent typed calls fail
+quickly with recovery guidance instead of waiting for the bridge timeout. Use
+`dcc-mcp-cli ui-control` for the same instance, or search `ui-control` and load Core's `app-ui`
+compatibility Skill from an MCP client. The recovery session must bind the exact Unity PID/HWND
+through `dcc-cua`, dismiss one modal action, and then verify a fresh readiness probe before retrying.
 
 The default bridge targets one Unity Editor. For concurrent Editors, run one adapter per Editor and
 assign each pair a unique bridge port and URL before starting either process.
@@ -99,6 +99,10 @@ For local development, run `dcc-mcp-unity-standalone --bridge-port 3852 --watch-
 8. `build_windows_player` persists an active-target switch when needed, rejects dirty enabled scenes,
    and builds exactly the saved Build Settings scenes to a new UUID directory below `Builds/DccMcp`.
    Poll the job and launch the reported executable as a separate acceptance gate.
+9. `build_android_player` applies the same persistent scene and request boundaries to APK or AAB
+   output. It fails closed when Android support or required project signing is unavailable, never
+   accepts signing secrets, restores the app-bundle setting, and reports BuildReport metadata plus
+   the artifact size and SHA-256.
 
 Do not replace a timed-out job with a new UUID. Reconnect and inspect the original `request_id`;
 Unity persists queued/running/succeeded/failed state across domain reloads and rejects reuse with
@@ -114,6 +118,18 @@ accepts only the methods implemented in `DccMcpCommands` and executes them on Un
 loop. One persistent mutating job runs at a time. Mutations fail closed in incompatible Editor
 states. Requests, queued work, source text, scene snapshots, Console reads, and serialized responses
 have explicit size or lifetime budgets.
+
+## Tuanjie Engine
+
+团结引擎 (Tuanjie Engine) is Unity China's localized distribution of Unity, tailored for the
+Chinese market with additional platform support and AI capabilities. DCC-MCP Unity detects and
+works with both standard Unity Editor builds and Tuanjie Engine builds without separate
+deployment — no additional configuration is needed.
+
+When Tuanjie's optional AI packages are installed in the project, the `unity-tuanjie-ai` tool
+set becomes available. It exposes the native CustomTool catalog so agents can inspect available
+tools, submit requests, and query results through Tuanjie's Codely platform. Sign-in, credits,
+downloads, and task recovery remain owned by the Tuanjie runtime.
 
 ## Validation boundary
 

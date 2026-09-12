@@ -30,11 +30,20 @@ namespace DccMcp.Unity
                 JObject result;
                 switch (method)
                 {
+                    case "host.ping":
+                        result = new JObject { ["host_dispatch_ready"] = true };
+                        break;
+                    case "android.context":
+                        result = AndroidContext(parameters);
+                        break;
                     case "project.inspect":
                         result = InspectProject();
                         break;
                     case "assets.refresh":
                         result = RefreshAssets();
+                        break;
+                    case "assets.configure_sprite":
+                        result = ConfigureSpriteImporter(parameters);
                         break;
                     case "assets.read_text":
                         result = DccMcpJobs.ReadTextAsset(parameters);
@@ -43,6 +52,7 @@ namespace DccMcp.Unity
                     case "project.refresh_and_compile":
                     case "editor.set_play_mode":
                     case "project.build_windows_player":
+                    case "project.build_android_player":
                     case "project.run_tests":
                     case "editor.capture_game_view":
                         result = DccMcpJobs.Submit(method, parameters);
@@ -50,6 +60,11 @@ namespace DccMcp.Unity
                     case "jobs.inspect":
                         result = DccMcpJobs.Inspect(parameters);
                         break;
+                    case "components.list": result = DccMcpComponents.List(parameters); break;
+                    case "components.inspect": result = DccMcpComponents.Inspect(parameters); break;
+                    case "components.add": result = DccMcpComponents.Add(parameters); break;
+                    case "components.remove": result = DccMcpComponents.Remove(parameters); break;
+                    case "components.set": result = DccMcpComponents.Set(parameters); break;
                     case "scene.inspect":
                         result = InspectScene(parameters);
                         break;
@@ -87,6 +102,7 @@ namespace DccMcp.Unity
                 if (undoable)
                 {
                     Undo.SetCurrentGroupName("DCC-MCP: " + method);
+                    Undo.FlushUndoRecordObjects();
                     Undo.CollapseUndoOperations(undoGroup);
                 }
                 return result;
@@ -103,12 +119,13 @@ namespace DccMcp.Unity
 
         private static bool IsUndoable(string method)
         {
-            return method == "scene.create_game_object" || method == "scene.set_transform" || method == "scene.delete_game_object";
+            return method == "scene.create_game_object" || method == "scene.set_transform" || method == "scene.delete_game_object"\n                || method == "components.add" || method == "components.remove" || method == "components.set";
         }
 
         private static void EnsureEditorReady(string method)
         {
-            var mutating = method == "assets.refresh"
+            var mutating = IsUndoable(method) || method == "assets.refresh"
+                || method == "assets.configure_sprite"
                 || method == "scene.create_game_object"
                 || method == "scene.delete_game_object"
                 || method == "scene.set_transform"
@@ -128,6 +145,30 @@ namespace DccMcp.Unity
                 throw new InvalidOperationException(
                     "Editor mutation commands are disabled while Unity is entering or in Play Mode.");
             }
+        }
+
+        private static JObject AndroidContext(JObject parameters)
+        {
+            var configuredSdk = EditorPrefs.GetString("AndroidSdkRoot", "");
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var settings = assembly.GetType("UnityEditor.Android.AndroidExternalToolsSettings", false);
+                var property = settings == null ? null : settings.GetProperty("sdkRootPath");
+                if (property != null)
+                {
+                    configuredSdk = property.GetValue(null, null) as string ?? configuredSdk;
+                    break;
+                }
+            }
+            var context = new JObject {
+                ["project_path"] = System.IO.Path.GetDirectoryName(Application.dataPath),
+                ["configured_sdk"] = configuredSdk,
+                ["bundled_sdk"] = System.IO.Path.Combine(EditorApplication.applicationContentsPath,
+                    "PlaybackEngines/AndroidPlayer/SDK")
+            };
+            if (parameters["build_request_id"] != null)
+                context["build"] = DccMcpJobs.Inspect(new JObject { ["request_id"] = parameters["build_request_id"] });
+            return context;
         }
 
         private static JObject InspectProject()
@@ -163,6 +204,65 @@ namespace DccMcp.Unity
         {
             AssetDatabase.Refresh();
             return new JObject { ["refreshed"] = true };
+        }
+
+        private static JObject ConfigureSpriteImporter(JObject parameters)
+        {
+            var path = RequirePngAssetPath(parameters);
+            DccMcpJobs.EnsureProjectAssetPathSafe(path);
+            var pixelsPerUnit = ReadOptionalInt(parameters, "pixels_per_unit", 100);
+            if (pixelsPerUnit < 1 || pixelsPerUnit > 10000)
+            {
+                throw new InvalidOperationException(
+                    "pixels_per_unit must be between 1 and 10000.");
+            }
+
+            var filterName = (string)parameters["filter_mode"] ?? "bilinear";
+            FilterMode filterMode;
+            if (filterName == "point")
+            {
+                filterMode = FilterMode.Point;
+            }
+            else if (filterName == "bilinear")
+            {
+                filterMode = FilterMode.Bilinear;
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    "filter_mode must be point or bilinear.");
+            }
+
+            AssetDatabase.ImportAsset(
+                path,
+                ImportAssetOptions.ForceSynchronousImport | ImportAssetOptions.ForceUpdate);
+            var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (importer == null)
+            {
+                throw new InvalidOperationException(
+                    "PNG texture asset is unavailable or could not be imported: " + path);
+            }
+
+            importer.textureType = TextureImporterType.Sprite;
+            importer.spriteImportMode = SpriteImportMode.Single;
+            importer.spritePixelsPerUnit = pixelsPerUnit;
+            importer.mipmapEnabled = false;
+            importer.alphaIsTransparency = true;
+            importer.wrapMode = TextureWrapMode.Clamp;
+            importer.filterMode = filterMode;
+            importer.SaveAndReimport();
+
+            return new JObject
+            {
+                ["configured"] = true,
+                ["path"] = path,
+                ["guid"] = AssetDatabase.AssetPathToGUID(path),
+                ["pixels_per_unit"] = pixelsPerUnit,
+                ["filter_mode"] = filterName,
+                ["mipmaps"] = false,
+                ["alpha_is_transparency"] = true,
+                ["wrap_mode"] = "clamp",
+            };
         }
 
         private static JObject InspectScene(JObject parameters)
@@ -407,6 +507,32 @@ namespace DccMcp.Unity
                 throw new InvalidOperationException(name + " must be at most 120 characters.");
             }
             return value;
+        }
+
+        private static string RequirePngAssetPath(JObject parameters)
+        {
+            var path = (string)parameters["path"];
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                throw new InvalidOperationException("path is required.");
+            }
+            if (path.Length > 512
+                || !path.StartsWith("Assets/", StringComparison.Ordinal)
+                || !path.EndsWith(".png", StringComparison.Ordinal)
+                || path.IndexOf('\\') >= 0)
+            {
+                throw new InvalidOperationException(
+                    "path must be a lowercase .png asset below Assets using forward slashes.");
+            }
+            foreach (var segment in path.Split('/'))
+            {
+                if (string.IsNullOrEmpty(segment) || segment == "." || segment == "..")
+                {
+                    throw new InvalidOperationException(
+                        "path must not contain empty, current, or parent segments.");
+                }
+            }
+            return path;
         }
 
         private static int RequireInt(JObject parameters, string name)

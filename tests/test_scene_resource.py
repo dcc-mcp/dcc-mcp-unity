@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from pathlib import Path
 
 from dcc_mcp_unity import server
@@ -49,3 +50,16 @@ def test_inspect_scene_publishes_returned_snapshot(monkeypatch) -> None:
 
     assert result["success"] is True
     assert published == [snapshot]
+
+
+def test_module_entrypoint_registers_canonical_server_module(monkeypatch) -> None:
+    called = []
+    monkeypatch.setattr(server, "__name__", "__main__")
+    monkeypatch.setitem(sys.modules, "__main__", server)
+    monkeypatch.delitem(sys.modules, "dcc_mcp_unity.server", raising=False)
+    monkeypatch.setattr(server, "main", lambda: called.append(True))
+
+    server._run_module_entrypoint()
+
+    assert sys.modules["dcc_mcp_unity.server"] is server
+    assert called == [True]

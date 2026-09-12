@@ -8,11 +8,20 @@ import threading
 import time
 from typing import Any
 
-from dcc_mcp_core.bridge import DccBridge
+from dcc_mcp_core.bridge import BridgeConnectionError, DccBridge
 
 _bridge: DccBridge | None = None
 _lock = threading.Lock()
 _HOST_REQUEST_LIFETIME_SECONDS = 55
+_host_dispatch_ready = threading.Event()
+
+_HOST_BLOCKED_MESSAGE = (
+    "Unity transport is connected, but the Editor main thread is not dispatching. "
+    "A native modal dialog may be blocking Unity. Use Core UI Control with the same "
+    "instance ID (`dcc-mcp-cli ui-control`); MCP agents can search for ui-control "
+    "and load the `app-ui` compatibility Skill. Bind the exact Unity PID/HWND "
+    "through dcc-cua, dismiss the modal (for example Reload or Ignore), and retry."
+)
 
 
 def _bridge_timeout() -> float:
@@ -52,13 +61,38 @@ def stop_bridge() -> None:
         bridge, _bridge = _bridge, None
     if bridge is not None:
         bridge.disconnect()
+    set_host_dispatch_ready(False)
+
+
+def set_host_dispatch_ready(ready: bool) -> None:
+    """Publish whether Unity's main-thread update loop answered a live probe."""
+    if ready:
+        _host_dispatch_ready.set()
+    else:
+        _host_dispatch_ready.clear()
+
+
+def is_host_dispatch_ready() -> bool:
+    return _host_dispatch_ready.is_set()
+
+
+def probe_host_dispatch(deadline_seconds: float) -> None:
+    """Send a raw main-thread probe without applying the public-call readiness guard."""
+    get_bridge().call(
+        "host.ping",
+        _dcc_mcp_deadline_unix_ms=int((time.time() + deadline_seconds) * 1000),
+    )
 
 
 def call_host(method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
     """Invoke one typed command in the connected Unity Editor."""
+    current_bridge = get_bridge()
+    connected = getattr(current_bridge, "is_connected", None)
+    if callable(connected) and connected() and not is_host_dispatch_ready():
+        raise BridgeConnectionError(_HOST_BLOCKED_MESSAGE)
     request_params = dict(params or {})
     request_params["_dcc_mcp_deadline_unix_ms"] = int(
         (time.time() + _HOST_REQUEST_LIFETIME_SECONDS) * 1000
     )
-    result = get_bridge().call(method, **request_params)
+    result = current_bridge.call(method, **request_params)
     return result if isinstance(result, dict) else {"value": result}

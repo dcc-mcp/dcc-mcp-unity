@@ -5,9 +5,12 @@ from pathlib import Path
 
 import pytest
 import yaml
+from dcc_mcp_core import DeferredToolResult
+from dcc_mcp_core.bridge import BridgeRpcError
 from dcc_mcp_core.skill import skill_error
 from jsonschema import Draft7Validator
 
+import dcc_mcp_unity.job_result as job_results
 from dcc_mcp_unity.job_result import job_state_result
 
 ROOT = Path(__file__).parents[1]
@@ -27,6 +30,18 @@ def _load_script(skill: str, name: str):
     ("skill", "name", "method", "arguments"),
     [
         ("unity-project", "read_text_asset", "assets.read_text", {"path": "Assets/Game.cs"}),
+        ("unity-scene", "list_components", "components.list", {"instance_id": -123}),
+        ("unity-scene", "list_components", "components.list", {"instance_id": "123"}),
+        (
+            "unity-project",
+            "configure_sprite_importer",
+            "assets.configure_sprite",
+            {
+                "path": "Assets/Art/Hero.png",
+                "pixels_per_unit": 128,
+                "filter_mode": "point",
+            },
+        ),
         (
             "unity-project",
             "upsert_text_asset",
@@ -55,6 +70,15 @@ def _load_script(skill: str, name: str):
             "build_windows_player",
             "project.build_windows_player",
             {"request_id": "778e72dd-e536-4ff8-aad0-9b752ab61c3b"},
+        ),
+        (
+            "unity-project",
+            "build_android_player",
+            "project.build_android_player",
+            {
+                "request_id": "778e72dd-e536-4ff8-aad0-9b752ab61c3b",
+                "artifact_kind": "aab",
+            },
         ),
         (
             "unity-project",
@@ -95,8 +119,47 @@ def test_game_authoring_wrappers_forward_only_typed_arguments(
 
     result = module.main(**arguments, ignored_core_metadata=True)
 
-    assert result["success"] is True
+    if name in {
+        "upsert_text_asset",
+        "refresh_and_compile",
+        "set_play_mode",
+        "build_windows_player",
+        "build_android_player",
+        "run_tests",
+        "capture_game_view",
+    }:
+        assert isinstance(result, DeferredToolResult)
+    else:
+        assert result["success"] is True
     assert calls == [(method, arguments)]
+
+
+def test_tuanjie_ai_wrapper_preserves_native_envelope(monkeypatch):
+    module = _load_script("unity-tuanjie-ai", "execute_tuanjie_ai")
+    native_result = {
+        "success": True,
+        "message": "Session assets listed.",
+        "prompt": "Select an asset.",
+        "assets": [],
+    }
+    monkeypatch.setattr(module, "call_host", lambda *_args, **_kwargs: native_result)
+
+    result = module.main(tool_name="list_session_assets", parameters={})
+
+    assert result["success"] is True
+    assert result["context"]["native_result"] == native_result
+
+
+def test_tuanjie_ai_wrapper_propagates_native_failure(monkeypatch):
+    module = _load_script("unity-tuanjie-ai", "execute_tuanjie_ai")
+    native_result = {"success": False, "message": "'session_id' parameter is required"}
+    monkeypatch.setattr(module, "call_host", lambda *_args, **_kwargs: native_result)
+
+    result = module.main(tool_name="list_session_assets", parameters={})
+
+    assert result["success"] is False
+    assert result["error"] == native_result["message"]
+    assert result["context"]["native_result"] == native_result
 
 
 def test_game_authoring_manifests_declare_the_bounded_surface():
@@ -105,10 +168,12 @@ def test_game_authoring_manifests_declare_the_bounded_surface():
 
     for name in (
         "read_text_asset",
+        "configure_sprite_importer",
         "upsert_text_asset",
         "refresh_and_compile",
         "set_play_mode",
         "build_windows_player",
+        "build_android_player",
         "run_tests",
     ):
         assert f"- name: {name}" in project
@@ -123,19 +188,35 @@ def test_game_authoring_manifests_declare_the_bounded_surface():
     assert "queued/running/completed" not in project
 
 
-def test_text_asset_schema_rejects_traversal_and_backslashes():
+def test_project_asset_schemas_reject_traversal_and_backslashes():
     manifest = yaml.safe_load((SKILLS / "unity-project" / "tools.yaml").read_text("utf-8"))
     tools = {tool["name"]: tool for tool in manifest["tools"]}
-    for name in ("read_text_asset", "upsert_text_asset"):
+    for name in ("read_text_asset", "upsert_text_asset", "configure_sprite_importer"):
         pattern = tools[name]["input_schema"]["properties"]["path"]["pattern"]
-        assert re.fullmatch(pattern, "Assets/Game/Scripts/Player.cs")
+        valid = (
+            "Assets/Art/Hero.png"
+            if name == "configure_sprite_importer"
+            else "Assets/Game/Scripts/Player.cs"
+        )
+        assert re.fullmatch(pattern, valid)
+        extension = "png" if name == "configure_sprite_importer" else "cs"
         for invalid in (
-            "Assets/../ProjectSettings/ProjectVersion.txt",
-            "Assets/./Player.cs",
-            r"Assets\Game\Player.cs",
-            "Assets/Game/../Player.cs",
+            f"Assets/../ProjectSettings/Probe.{extension}",
+            f"Assets/./Player.{extension}",
+            rf"Assets\Game\Player.{extension}",
+            f"Assets/Game/../Player.{extension}",
         ):
             assert re.fullmatch(pattern, invalid) is None
+
+
+def test_sprite_importer_reuses_the_project_reparse_boundary():
+    package = ROOT / "src" / "dcc_mcp_unity" / "unity_package"
+    commands = (package / "Editor" / "DccMcpCommands.cs").read_text(encoding="utf-8")
+    jobs = (package / "Editor" / "DccMcpJobs.cs").read_text(encoding="utf-8")
+
+    assert "DccMcpJobs.EnsureProjectAssetPathSafe(path);" in commands
+    assert "internal static void EnsureProjectAssetPathSafe" in jobs
+    assert "EnsureNoReparsePoints(fullPath);" in jobs
 
 
 def test_job_tool_schemas_publish_states_and_accept_the_standard_error_envelope():
@@ -151,13 +232,14 @@ def test_job_tool_schemas_publish_states_and_accept_the_standard_error_envelope(
                 "refresh_and_compile",
                 "set_play_mode",
                 "build_windows_player",
+                "build_android_player",
                 "run_tests",
                 "inspect_job",
                 "capture_game_view",
             }
         )
 
-    assert len(job_tools) == 7
+    assert len(job_tools) == 8
     standard_error = skill_error("failed", "transport error")
     successful_job = {
         "success": True,
@@ -185,6 +267,9 @@ def test_job_tool_schemas_publish_states_and_accept_the_standard_error_envelope(
             "failed",
         ]
         assert tool["annotations"]["deferred_hint"] is False
+        if tool["name"] != "inspect_job":
+            assert tool["execution"] == "async"
+            assert tool["timeout_hint_secs"] == 3600
 
 
 def test_utf8_text_limit_fits_the_bridge_after_worst_case_json_escaping(monkeypatch):
@@ -231,9 +316,52 @@ def test_invalid_host_job_state_uses_schema_safe_error_context():
     assert result["context"]["returned_state"] == "complete"
 
 
+def test_running_host_job_defers_until_unity_reports_terminal_state(monkeypatch):
+    snapshots = iter(
+        [
+            BridgeRpcError(
+                -32000,
+                "Unity job was not found for request_id: 778e72dd-e536-4ff8-aad0-9b752ab61c3b",
+            ),
+            {"state": "running", "phase": "tests"},
+            {"state": "succeeded", "phase": "complete", "result": {"passed": 1}},
+        ]
+    )
+
+    def inspect_job(*_args, **_kwargs):
+        snapshot = next(snapshots)
+        if isinstance(snapshot, Exception):
+            raise snapshot
+        return snapshot
+
+    monkeypatch.setattr(
+        job_results,
+        "call_host",
+        inspect_job,
+        raising=False,
+    )
+
+    deferred = job_state_result(
+        "Unity Test Runner",
+        {
+            "request_id": "778e72dd-e536-4ff8-aad0-9b752ab61c3b",
+            "state": "queued",
+            "phase": "queued",
+        },
+    )
+
+    assert isinstance(deferred, DeferredToolResult)
+    assert deferred.check_is_finished() is None
+    assert deferred.check_is_finished() is None
+    result = deferred.check_is_finished()
+    assert result["success"] is True
+    assert result["context"]["state"] == "succeeded"
+    assert result["context"]["result"] == {"passed": 1}
+
+
 @pytest.mark.parametrize(
     ("state", "expected_success"),
-    [("queued", True), ("succeeded", True), ("failed", False)],
+    [("succeeded", True), ("failed", False)],
 )
 def test_submit_wrapper_preserves_terminal_job_state(monkeypatch, state, expected_success):
     module = _load_script("unity-project", "upsert_text_asset")
@@ -271,6 +399,7 @@ def test_editor_job_protocol_is_persistent_fail_closed_and_bounded():
         "editor.set_play_mode",
         "jobs.inspect",
         "project.build_windows_player",
+        "project.build_android_player",
         "project.run_tests",
         "editor.capture_game_view",
     ):
@@ -299,6 +428,12 @@ def test_editor_job_protocol_is_persistent_fail_closed_and_bounded():
     assert "openScene.isDirty" in jobs
     assert '"Builds", "DccMcp"' in jobs
     assert "BuildTarget.StandaloneWindows64" in jobs
+    assert "BuildTarget.Android" in jobs
+    assert "BuildPipeline.IsBuildTargetSupported" in jobs
+    assert "EditorUserBuildSettings.buildAppBundle" in jobs
+    assert 'ReadAndroidSigningSetting("useCustomKeystore")' in jobs
+    assert "signing secrets are never accepted" in jobs
+    assert "HashFile(outputPath)" in jobs
     assert '"DccMcpGame_Data"' in jobs
     assert "ScreenCapture.CaptureScreenshot" in jobs
     assert 'GetType("UnityEditor.GameView")' in jobs
@@ -307,6 +442,29 @@ def test_editor_job_protocol_is_persistent_fail_closed_and_bounded():
     assert "Game View capture requires Play Mode" in jobs
     assert "CompileAssemblyFromSource" not in jobs
     assert "Process.Start" not in jobs
+
+
+def test_android_build_contract_is_typed_and_never_accepts_signing_secrets():
+    manifest = yaml.safe_load((SKILLS / "unity-project" / "tools.yaml").read_text("utf-8"))
+    tool = next(tool for tool in manifest["tools"] if tool["name"] == "build_android_player")
+    properties = tool["input_schema"]["properties"]
+
+    assert set(properties) == {"request_id", "artifact_kind"}
+    assert properties["artifact_kind"]["enum"] == ["apk", "aab"]
+    assert tool["input_schema"]["additionalProperties"] is False
+    result = tool["output_schema"]["properties"]["context"]["properties"]["result"]
+    assert {
+        "target",
+        "artifact_kind",
+        "build_report_outcome",
+        "errors",
+        "warnings",
+        "duration_seconds",
+        "scenes",
+    } <= set(result["required"])
+    succeeded_requirement = result["allOf"][0]["then"]["required"]
+    assert set(succeeded_requirement) == {"relative_path", "bytes", "sha256"}
+    assert "password" not in json.dumps(tool).lower()
 
 
 def test_typed_test_runner_uses_bounded_exact_filters_and_native_nunit_evidence():
@@ -352,3 +510,12 @@ def test_source_write_security_contract_bounds_external_writer_and_reparse_races
     assert "cooperative" in documentation
     assert "same-user" in documentation
     assert "conflict backup" in documentation
+
+
+def test_component_listing_accepts_unmodified_legacy_and_modern_ids():
+    tools = yaml.safe_load((SKILLS / "unity-scene/tools.yaml").read_text())["tools"]
+    schema = next(tool["input_schema"] for tool in tools if tool["name"] == "list_components")
+    validator = Draft7Validator(schema)
+    assert validator.is_valid({"instance_id": -123})
+    assert validator.is_valid({"instance_id": "18446744073709551615"})
+    assert not validator.is_valid({"instance_id": "name matching"})

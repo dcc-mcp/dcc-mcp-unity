@@ -58,6 +58,7 @@ namespace DccMcp.Unity
             }
             catch (Exception exception)
             {
+                DccMcpBootstrapErrors.Capture("sidecar-launch", exception);
                 UnityEngine.Debug.LogWarning("DCC-MCP Unity sidecar failed to start: " + exception.Message);
             }
         }

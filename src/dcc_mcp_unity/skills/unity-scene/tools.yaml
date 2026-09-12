@@ -144,3 +144,171 @@ tools:
     next-tools:
       on-success: [unity_scene__inspect_scene]
       on-failure: [dcc_diagnostics__screenshot, dcc_diagnostics__audit_log]
+  - name: list_components
+    description: Inspect components of one fresh GameObject instance ID and obtain domain-scoped
+      opaque handles.
+    input_schema:
+      type: object
+      properties:
+        instance_id:
+          oneOf:
+          - type: string
+            pattern: "^-?[0-9]+$"
+            maxLength: 20
+          - type: integer
+      required:
+      - instance_id
+      additionalProperties: false
+    output_schema:
+      type: object
+    execution: sync
+    affinity: main
+    enforce_thread_affinity: true
+    timeout_hint_secs: 60
+    source_file: scripts/list_components.py
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
+  - name: inspect_component
+    description: Inspect bounded serialized properties and a compare-and-swap fingerprint.
+      Unsupported kinds are read-only.
+    input_schema:
+      type: object
+      properties:
+        component_id:
+          type: string
+          minLength: 32
+          maxLength: 32
+        max_properties:
+          type: integer
+          minimum: 1
+          maximum: 1000
+          default: 200
+      required:
+      - component_id
+      additionalProperties: false
+    output_schema:
+      type: object
+    execution: sync
+    affinity: main
+    enforce_thread_affinity: true
+    timeout_hint_secs: 60
+    source_file: scripts/inspect_component.py
+    annotations:
+      read_only_hint: true
+      destructive_hint: false
+      idempotent_hint: true
+      open_world_hint: false
+      deferred_hint: false
+  - name: add_component
+    description: Add one exact fully qualified Component type through Unity Undo to
+      a loaded scene object.
+    input_schema:
+      type: object
+      properties:
+        object_id:
+          type: string
+          minLength: 32
+          maxLength: 32
+        type_name:
+          type: string
+          minLength: 1
+          maxLength: 256
+      required:
+      - object_id
+      - type_name
+      additionalProperties: false
+    output_schema:
+      type: object
+    execution: sync
+    affinity: main
+    enforce_thread_affinity: true
+    timeout_hint_secs: 60
+    source_file: scripts/add_component.py
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: false
+      open_world_hint: false
+      deferred_hint: false
+  - name: remove_component
+    description: Remove one Component through Undo with optional fingerprint precondition;
+      Transform removal is rejected.
+    input_schema:
+      type: object
+      properties:
+        component_id:
+          type: string
+          minLength: 32
+          maxLength: 32
+        expected_fingerprint:
+          type: string
+          minLength: 64
+          maxLength: 64
+      required:
+      - component_id
+      additionalProperties: false
+    output_schema:
+      type: object
+    execution: sync
+    affinity: main
+    enforce_thread_affinity: true
+    timeout_hint_secs: 60
+    source_file: scripts/remove_component.py
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: false
+      open_world_hint: false
+      deferred_hint: false
+  - name: set_component_properties
+    description: Stage and validate serialized values, apply with Undo, then return
+      normalized readback. No implicit saves. Arrays support existing element paths
+      only.
+    input_schema:
+      type: object
+      properties:
+        component_id:
+          type: string
+          minLength: 32
+          maxLength: 32
+        expected_fingerprint:
+          type: string
+          minLength: 64
+          maxLength: 64
+        properties:
+          type: array
+          minItems: 1
+          maxItems: 64
+          items:
+            type: object
+            required:
+            - path
+            - value
+            properties:
+              path:
+                type: string
+                minLength: 1
+                maxLength: 512
+              value: {}
+            additionalProperties: false
+      required:
+      - component_id
+      - properties
+      additionalProperties: false
+    output_schema:
+      type: object
+    execution: sync
+    affinity: main
+    enforce_thread_affinity: true
+    timeout_hint_secs: 60
+    source_file: scripts/set_component_properties.py
+    annotations:
+      read_only_hint: false
+      destructive_hint: true
+      idempotent_hint: false
+      open_world_hint: false
+      deferred_hint: false

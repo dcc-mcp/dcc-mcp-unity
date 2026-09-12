@@ -1,5 +1,99 @@
 # Changelog
 
+## [0.13.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.12.0...v0.13.0) (2026-08-23)
+
+
+### Features
+
+* adopt Unity install SOP v1 ([#66](https://github.com/dcc-mcp/dcc-mcp-unity/issues/66)) ([86886ab](https://github.com/dcc-mcp/dcc-mcp-unity/commit/86886ab35f6fe322c738095326b6e731ed8686e7))
+
+## [0.12.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.11.2...v0.12.0) (2026-08-18)
+
+
+### Features
+
+* add persistent Android player builds ([b5e72f4](https://github.com/dcc-mcp/dcc-mcp-unity/commit/b5e72f463293dcc4958b9fc6e424231c4a0d1b6d))
+
+
+### Bug Fixes
+
+* detect blocked Unity host dispatch ([a7b0d9b](https://github.com/dcc-mcp/dcc-mcp-unity/commit/a7b0d9b8c3cf9cdcf154e35263899bdb6d1f2cf1))
+* keep Unity menu version in sync ([8ce546e](https://github.com/dcc-mcp/dcc-mcp-unity/commit/8ce546e69ee2151ad6e82d152194926e12200c8d))
+* preserve Unity test result callbacks ([fef8986](https://github.com/dcc-mcp/dcc-mcp-unity/commit/fef8986b0b17379049c69a8f0d708aed7d274e40))
+
+## [0.11.2](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.11.1...v0.11.2) (2026-07-26)
+
+
+### Bug Fixes
+
+* preserve readiness during Unity domain reloads ([#54](https://github.com/dcc-mcp/dcc-mcp-unity/issues/54)) ([197de76](https://github.com/dcc-mcp/dcc-mcp-unity/commit/197de7624e1bff1a5d6a37a76734e3c7e7b79a43))
+
+## [0.11.1](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.11.0...v0.11.1) (2026-07-26)
+
+
+### Bug Fixes
+
+* retry transient missing Unity jobs ([decae9c](https://github.com/dcc-mcp/dcc-mcp-unity/commit/decae9c57ee926351be5cc299a34c81f39b18271))
+* retry transient missing Unity jobs ([8cab8dd](https://github.com/dcc-mcp/dcc-mcp-unity/commit/8cab8dd6a188fc24f7951b190166b90a365ff4f2))
+
+## [0.11.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.10.1...v0.11.0) (2026-07-26)
+
+
+### Features
+
+* **project:** configure generated sprite imports safely ([394a0cb](https://github.com/dcc-mcp/dcc-mcp-unity/commit/394a0cb88fde008bbb50740c41a64d9c4adfac4a))
+* **project:** configure generated sprite imports safely ([fa37040](https://github.com/dcc-mcp/dcc-mcp-unity/commit/fa370406e54454b020c3f7282e9fea149749f79f))
+* **tuanjie:** expose native custom tool descriptions ([881ea58](https://github.com/dcc-mcp/dcc-mcp-unity/commit/881ea58f4105b1d1a7e26c19a0473db84d8e6336))
+* **tuanjie:** expose native custom tool descriptions ([47e5156](https://github.com/dcc-mcp/dcc-mcp-unity/commit/47e5156d22d30d5d3cebffc0879a9767a7ed4417))
+
+## [0.10.1](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.10.0...v0.10.1) (2026-07-26)
+
+
+### Bug Fixes
+
+* wait for persistent Unity jobs to finish ([#47](https://github.com/dcc-mcp/dcc-mcp-unity/issues/47)) ([8450de8](https://github.com/dcc-mcp/dcc-mcp-unity/commit/8450de87dd396782e9a1a11ddaad08ac3f4ff8f7))
+
+## [0.10.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.9.0...v0.10.0) (2026-07-25)
+
+
+### Features
+
+* add unified DCC MCP menu with Copy Instance ID, Server Info, and About ([2124a59](https://github.com/dcc-mcp/dcc-mcp-unity/commit/2124a59d1e8993a313819c780b6b193d5b253671))
+
+
+### Bug Fixes
+
+* make sidecar pid ownership safe on Windows ([#46](https://github.com/dcc-mcp/dcc-mcp-unity/issues/46)) ([c3a8c4a](https://github.com/dcc-mcp/dcc-mcp-unity/commit/c3a8c4a5277c5081af48c5e3f6458f3d3d9df4d2))
+* remove duplicate GetSessionInstanceId in DccMcpBridge ([46360c4](https://github.com/dcc-mcp/dcc-mcp-unity/commit/46360c4adff4fd05fb86965cecbed726e70efefd))
+* route default CLI through sidecar lifecycle ([#45](https://github.com/dcc-mcp/dcc-mcp-unity/issues/45)) ([174c900](https://github.com/dcc-mcp/dcc-mcp-unity/commit/174c90069d0daa474a2e5bcdf1c63673945388d2))
+
+## [0.9.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.8.1...v0.9.0) (2026-07-25)
+
+
+### Features
+
+* **ci:** add Tuanjie Engine (团结引擎) CI validation workflow ([857093b](https://github.com/dcc-mcp/dcc-mcp-unity/commit/857093b696077eddb183dbbc6dfec0939e18b77b))
+
+
+### Bug Fixes
+
+* **unity:** expose native Tuanjie custom tools ([#42](https://github.com/dcc-mcp/dcc-mcp-unity/issues/42)) ([8c1174c](https://github.com/dcc-mcp/dcc-mcp-unity/commit/8c1174cc90684da02fda2670fc52c8f5e0422138))
+* **unity:** share module entry server state ([dc6efaf](https://github.com/dcc-mcp/dcc-mcp-unity/commit/dc6efafac3adc0d38040d7fd6ec7439056ebee3e))
+
+## [0.8.1](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.8.0...v0.8.1) (2026-07-25)
+
+
+### Bug Fixes
+
+* **unity:** preserve Tuanjie native result envelopes ([#37](https://github.com/dcc-mcp/dcc-mcp-unity/issues/37)) ([9a3084f](https://github.com/dcc-mcp/dcc-mcp-unity/commit/9a3084fc83b9deb7140dcec451935e40a886bad3))
+* **unity:** wait out transient asset imports ([#39](https://github.com/dcc-mcp/dcc-mcp-unity/issues/39)) ([c818c52](https://github.com/dcc-mcp/dcc-mcp-unity/commit/c818c5276c08f20d1f0ff21f8f797f9c30547956))
+
+
+### Documentation
+
+* **readme:** remove competitor comparisons, add Unity 2018+ and Tuanjie Engine coverage ([67ba6cf](https://github.com/dcc-mcp/dcc-mcp-unity/commit/67ba6cfaad1b211095dddea22ac75676a7c23991))
+* **readme:** remove competitor comparisons, emphasize Unity 2018+ support, add Tuanjie Engine section ([6cc66c3](https://github.com/dcc-mcp/dcc-mcp-unity/commit/6cc66c3da1870c732659d6e31302194efbb18d04))
+
 ## [0.8.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.7.0...v0.8.0) (2026-07-24)
 
 

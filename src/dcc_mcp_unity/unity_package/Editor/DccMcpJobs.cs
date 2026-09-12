@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
@@ -43,13 +44,21 @@ namespace DccMcp.Unity
 
         static DccMcpJobs()
         {
-            if (DccMcpBridge.IsImportWorkerOrBatchMode())
+            try
             {
-                return;
+                if (DccMcpBridge.IsImportWorkerOrBatchMode())
+                {
+                    return;
+                }
+                EditorApplication.update += Tick;
+                AssemblyReloadEvents.beforeAssemblyReload += Stop;
+                RestoreTestCallbackAfterReload();
             }
-            EditorApplication.update += Tick;
-            AssemblyReloadEvents.beforeAssemblyReload += Stop;
-            RestoreTestCallbackAfterReload();
+            catch (Exception exception)
+            {
+                DccMcpBootstrapErrors.Capture("jobs", exception);
+                Debug.LogError("DCC-MCP Unity jobs bootstrap failed: " + exception.Message);
+            }
         }
 
         internal static JObject ReadTextAsset(JObject parameters)
@@ -221,6 +230,9 @@ namespace DccMcp.Unity
                 case "project.build_windows_player":
                     AdvanceWindowsBuild(store, job);
                     break;
+                case "project.build_android_player":
+                    AdvanceAndroidBuild(store, job);
+                    break;
                 case "project.run_tests":
                     AdvanceTestRun(store, job);
                     break;
@@ -235,6 +247,16 @@ namespace DccMcp.Unity
         private static void AdvanceUpsert(JObject store, JObject job)
         {
             RequireSourceWriteGate();
+            if (EditorApplication.isCompiling || EditorApplication.isUpdating)
+            {
+                if (TimedOut(job, TimeSpan.FromMinutes(10)))
+                {
+                    throw new InvalidOperationException(
+                        "Unity did not become ready for a source write within 10 minutes.");
+                }
+                Touch(job);
+                return;
+            }
             EnsureEditorIdleAndEditing("Source writes");
             var parameters = (JObject)job["parameters"];
             var relativePath = (string)parameters["path"];
@@ -549,91 +571,20 @@ namespace DccMcp.Unity
                 throw new InvalidOperationException(
                     "Unity reloaded while the player build was running; completion cannot be proven.");
             }
-            if (TimedOut(job, TimeSpan.FromMinutes(10)))
+            var scenes = PreparePlayerBuild(
+                store,
+                job,
+                "Windows x64",
+                BuildTargetGroup.Standalone,
+                BuildTarget.StandaloneWindows64,
+                null);
+            if (scenes == null)
             {
-                throw new InvalidOperationException(
-                    "Unity did not become ready for a Windows player build within 10 minutes.");
-            }
-
-            if (phase == "starting")
-            {
-                EnsureEditorIdleAndEditing("Windows player builds");
-                var initialScenes = ValidateEnabledBuildScenes();
-                var recordedScenes = new JArray();
-                foreach (var scene in initialScenes)
-                {
-                    recordedScenes.Add(scene);
-                }
-                job["build_scenes"] = recordedScenes;
-                if (EditorUserBuildSettings.activeBuildTarget != BuildTarget.StandaloneWindows64)
-                {
-                    job["phase"] = "switching_build_target";
-                    Touch(job);
-                    SaveStore(store);
-                    if (!EditorUserBuildSettings.SwitchActiveBuildTarget(
-                        BuildTargetGroup.Standalone,
-                        BuildTarget.StandaloneWindows64))
-                    {
-                        throw new InvalidOperationException(
-                            "Unity could not switch the active build target to Windows x64.");
-                    }
-                    return;
-                }
-                job["phase"] = "ready_to_build";
-                Touch(job);
-                SaveStore(store);
                 return;
             }
 
-            if (phase == "switching_build_target")
-            {
-                if (EditorApplication.isCompiling || EditorApplication.isUpdating)
-                {
-                    Touch(job);
-                    return;
-                }
-                EnsureEditorIdleAndEditing("Windows player builds");
-                if (EditorUserBuildSettings.activeBuildTarget != BuildTarget.StandaloneWindows64)
-                {
-                    throw new InvalidOperationException(
-                        "Unity finished reloading without activating the Windows x64 build target.");
-                }
-                job["phase"] = "ready_to_build";
-                Touch(job);
-                SaveStore(store);
-                return;
-            }
-
-            if (phase != "ready_to_build")
-            {
-                throw new InvalidOperationException("Unknown Windows build job phase: " + phase);
-            }
-            if (EditorApplication.isCompiling || EditorApplication.isUpdating)
-            {
-                Touch(job);
-                return;
-            }
-            EnsureEditorIdleAndEditing("Windows player builds");
-            if (EditorUserBuildSettings.activeBuildTarget != BuildTarget.StandaloneWindows64)
-            {
-                throw new InvalidOperationException(
-                    "The active build target changed before the Windows player build started.");
-            }
-            var scenes = ValidateEnabledBuildScenes();
-            EnsureBuildScenesUnchanged((JArray)job["build_scenes"], scenes);
-
-            var requestId = (string)job["request_id"];
-            var relativeDirectory = Path.Combine("Builds", "DccMcp", requestId);
-            var projectPath = Path.GetDirectoryName(Application.dataPath) ?? string.Empty;
-            var outputDirectory = Path.Combine(projectPath, relativeDirectory);
-            EnsureNoReparsePoints(outputDirectory);
-            if (Directory.Exists(outputDirectory))
-            {
-                throw new InvalidOperationException(
-                    "The fixed Unity build output directory already exists: " + relativeDirectory);
-            }
-            Directory.CreateDirectory(outputDirectory);
-            EnsureNoReparsePoints(outputDirectory);
+            string relativeDirectory;
+            var outputDirectory = PrepareBuildOutputDirectory(job, out relativeDirectory);
 
             var outputPath = Path.Combine(outputDirectory, "DccMcpGame.exe");
             job["phase"] = "building";
@@ -677,6 +628,276 @@ namespace DccMcp.Unity
                 ["bytes"] = (long)report.summary.totalSize,
                 ["executable_bytes"] = new FileInfo(outputPath).Length,
             });
+        }
+
+        private static void AdvanceAndroidBuild(JObject store, JObject job)
+        {
+            var phase = (string)job["phase"];
+            if (phase == "building")
+            {
+                RestoreAndroidBuildSettings(job);
+                throw new InvalidOperationException(
+                    "Unity reloaded while the Android player build was running; completion cannot be proven.");
+            }
+            var parameters = (JObject)job["parameters"];
+            var artifactKind = (string)parameters["artifact_kind"];
+            var scenes = PreparePlayerBuild(
+                store,
+                job,
+                "Android",
+                BuildTargetGroup.Android,
+                BuildTarget.Android,
+                () => EnsureAndroidBuildSupportAndSigning(artifactKind));
+            if (scenes == null)
+            {
+                return;
+            }
+
+            string relativeDirectory;
+            var outputDirectory = PrepareBuildOutputDirectory(job, out relativeDirectory);
+
+            var artifactName = "DccMcpGame." + artifactKind;
+            var outputPath = Path.Combine(outputDirectory, artifactName);
+            var originalBuildAppBundle = EditorUserBuildSettings.buildAppBundle;
+            job["android_original_build_app_bundle"] = originalBuildAppBundle;
+            job["phase"] = "building";
+            Touch(job);
+            SaveStore(store);
+
+            BuildReport report;
+            try
+            {
+                EditorUserBuildSettings.buildAppBundle = artifactKind == "aab";
+                report = BuildPipeline.BuildPlayer(
+                    scenes,
+                    outputPath,
+                    BuildTarget.Android,
+                    BuildOptions.None);
+            }
+            finally
+            {
+                EditorUserBuildSettings.buildAppBundle = originalBuildAppBundle;
+                job.Remove("android_original_build_app_bundle");
+                Touch(job);
+                SaveStore(store);
+            }
+
+            var result = AndroidBuildResult(report, artifactKind, scenes);
+            if (report.summary.result != BuildResult.Succeeded)
+            {
+                job["result"] = result;
+                throw new InvalidOperationException(
+                    "Unity Android " + artifactKind.ToUpperInvariant() + " build failed with "
+                    + report.summary.totalErrors + " errors (" + report.summary.result + ").");
+            }
+            if (!File.Exists(outputPath) || new FileInfo(outputPath).Length == 0)
+            {
+                throw new InvalidOperationException(
+                    "Unity reported a successful Android build but the requested artifact is missing or empty.");
+            }
+
+            var artifact = new FileInfo(outputPath);
+            result["relative_path"] = NormalizeSeparators(
+                Path.Combine(relativeDirectory, artifactName));
+            result["bytes"] = artifact.Length;
+            result["sha256"] = HashFile(outputPath);
+            Succeed(job, result);
+        }
+
+        private static string[] PreparePlayerBuild(
+            JObject store,
+            JObject job,
+            string targetDescription,
+            BuildTargetGroup targetGroup,
+            BuildTarget target,
+            Action preflight)
+        {
+            if (TimedOut(job, TimeSpan.FromMinutes(10)))
+            {
+                throw new InvalidOperationException(
+                    "Unity did not become ready for a " + targetDescription
+                    + " player build within 10 minutes.");
+            }
+            var phase = (string)job["phase"];
+            if (phase == "starting")
+            {
+                EnsureEditorIdleAndEditing(targetDescription + " player builds");
+                if (preflight != null)
+                {
+                    preflight();
+                }
+                var scenes = ValidateEnabledBuildScenes();
+                job["build_scenes"] = new JArray(scenes);
+                if (EditorUserBuildSettings.activeBuildTarget != target)
+                {
+                    job["phase"] = "switching_build_target";
+                    Touch(job);
+                    SaveStore(store);
+                    if (!EditorUserBuildSettings.SwitchActiveBuildTarget(targetGroup, target))
+                    {
+                        throw new InvalidOperationException(
+                            "Unity could not switch the active build target to "
+                            + targetDescription + ".");
+                    }
+                    return null;
+                }
+                job["phase"] = "ready_to_build";
+                Touch(job);
+                SaveStore(store);
+                return null;
+            }
+            if (phase == "switching_build_target")
+            {
+                if (EditorApplication.isCompiling || EditorApplication.isUpdating)
+                {
+                    Touch(job);
+                    return null;
+                }
+                EnsureEditorIdleAndEditing(targetDescription + " player builds");
+                if (preflight != null)
+                {
+                    preflight();
+                }
+                if (EditorUserBuildSettings.activeBuildTarget != target)
+                {
+                    throw new InvalidOperationException(
+                        "Unity finished reloading without activating the "
+                        + targetDescription + " build target.");
+                }
+                job["phase"] = "ready_to_build";
+                Touch(job);
+                SaveStore(store);
+                return null;
+            }
+            if (phase != "ready_to_build")
+            {
+                throw new InvalidOperationException(
+                    "Unknown " + targetDescription + " build job phase: " + phase);
+            }
+            if (EditorApplication.isCompiling || EditorApplication.isUpdating)
+            {
+                Touch(job);
+                return null;
+            }
+            EnsureEditorIdleAndEditing(targetDescription + " player builds");
+            if (preflight != null)
+            {
+                preflight();
+            }
+            if (EditorUserBuildSettings.activeBuildTarget != target)
+            {
+                throw new InvalidOperationException(
+                    "The active build target changed before the "
+                    + targetDescription + " player build started.");
+            }
+            var currentScenes = ValidateEnabledBuildScenes();
+            EnsureBuildScenesUnchanged((JArray)job["build_scenes"], currentScenes);
+            return currentScenes;
+        }
+
+        private static string PrepareBuildOutputDirectory(
+            JObject job,
+            out string relativeDirectory)
+        {
+            relativeDirectory = Path.Combine("Builds", "DccMcp", (string)job["request_id"]);
+            var projectPath = Path.GetDirectoryName(Application.dataPath) ?? string.Empty;
+            var outputDirectory = Path.Combine(projectPath, relativeDirectory);
+            EnsureNoReparsePoints(outputDirectory);
+            if (Directory.Exists(outputDirectory))
+            {
+                throw new InvalidOperationException(
+                    "The fixed Unity build output directory already exists: " + relativeDirectory);
+            }
+            Directory.CreateDirectory(outputDirectory);
+            EnsureNoReparsePoints(outputDirectory);
+            return outputDirectory;
+        }
+
+        private static JObject AndroidBuildResult(
+            BuildReport report,
+            string artifactKind,
+            string[] scenes)
+        {
+            var sceneArray = new JArray();
+            foreach (var scene in scenes)
+            {
+                sceneArray.Add(scene);
+            }
+            return new JObject
+            {
+                ["target"] = "android",
+                ["artifact_kind"] = artifactKind,
+                ["package_name"] = PlayerSettings.GetApplicationIdentifier(BuildTargetGroup.Android),
+                ["build_report_outcome"] = report.summary.result.ToString(),
+                ["errors"] = report.summary.totalErrors,
+                ["warnings"] = report.summary.totalWarnings,
+                ["duration_seconds"] = report.summary.totalTime.TotalSeconds,
+                ["scenes"] = sceneArray,
+            };
+        }
+
+        private static void EnsureAndroidBuildSupportAndSigning(string artifactKind)
+        {
+            if (!BuildPipeline.IsBuildTargetSupported(BuildTargetGroup.Android, BuildTarget.Android))
+            {
+                throw new InvalidOperationException(
+                    "Android Build Support is unavailable; install the Unity Android module, SDK, and JDK before retrying.");
+            }
+            var keystoreName = ReadAndroidSigningSetting("keystoreName");
+            var keyaliasName = ReadAndroidSigningSetting("keyaliasName");
+            var keystorePass = ReadAndroidSigningSetting("keystorePass");
+            var keyaliasPass = ReadAndroidSigningSetting("keyaliasPass");
+            var customSetting = ReadAndroidSigningSetting("useCustomKeystore");
+            bool useCustomKeystore;
+            if (!bool.TryParse(customSetting, out useCustomKeystore))
+            {
+                useCustomKeystore = !string.IsNullOrWhiteSpace(keystoreName);
+            }
+            if (!useCustomKeystore)
+            {
+                if (artifactKind == "aab")
+                {
+                    throw new InvalidOperationException(
+                        "Android AAB builds require custom project signing in Player Settings; signing secrets are never accepted by this tool.");
+                }
+                return;
+            }
+            if (string.IsNullOrWhiteSpace(keystoreName)
+                || string.IsNullOrWhiteSpace(keyaliasName)
+                || string.IsNullOrEmpty(keystorePass)
+                || string.IsNullOrEmpty(keyaliasPass))
+            {
+                throw new InvalidOperationException(
+                    "Android custom signing is incomplete in Player Settings; configure the keystore, alias, and passwords locally before retrying.");
+            }
+            if (!File.Exists(keystoreName))
+            {
+                throw new InvalidOperationException(
+                    "The Android keystore configured in Player Settings is unavailable; its path is intentionally not reported.");
+            }
+        }
+
+        private static string ReadAndroidSigningSetting(string name)
+        {
+            var property = typeof(PlayerSettings.Android).GetProperty(
+                name,
+                BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+            if (property == null || !property.CanRead)
+            {
+                return null;
+            }
+            var value = property.GetValue(null, null);
+            return value == null ? null : Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        private static void RestoreAndroidBuildSettings(JObject job)
+        {
+            if (job["android_original_build_app_bundle"] == null)
+            {
+                return;
+            }
+            EditorUserBuildSettings.buildAppBundle = (bool)job["android_original_build_app_bundle"];
+            job.Remove("android_original_build_app_bundle");
         }
 
         internal static string[] ValidateEnabledBuildScenes()
@@ -791,7 +1012,9 @@ namespace DccMcp.Unity
             summary["relative_path"] = (string)job["test_report_relative_path"];
             summary["test_mode"] = parameters["test_mode"].DeepClone();
             summary["test_names"] = parameters["test_names"].DeepClone();
-            DccMcpTestRunner.ReleaseCallback((string)job["request_id"]);
+            DccMcpTestRunner.ReleaseCallback(
+                (string)job["request_id"],
+                (string)job["test_report_path"]);
             Succeed(job, summary);
         }
 
@@ -800,14 +1023,14 @@ namespace DccMcp.Unity
             if (recorded == null || recorded.Count != current.Length)
             {
                 throw new InvalidOperationException(
-                    "Enabled Build Settings scenes changed while preparing the Windows build.");
+                    "Enabled Build Settings scenes changed while preparing the player build.");
             }
             for (var index = 0; index < current.Length; index++)
             {
                 if (!string.Equals((string)recorded[index], current[index], StringComparison.Ordinal))
                 {
                     throw new InvalidOperationException(
-                        "Enabled Build Settings scenes changed while preparing the Windows build.");
+                        "Enabled Build Settings scenes changed while preparing the player build.");
                 }
             }
         }
@@ -953,6 +1176,16 @@ namespace DccMcp.Unity
                 case "editor.capture_game_view":
                     RequireOnlyProperties(parameters, "request_id");
                     break;
+                case "project.build_android_player":
+                    RequireOnlyProperties(parameters, "request_id", "artifact_kind");
+                    var artifactKind = RequireString(parameters, "artifact_kind");
+                    if (artifactKind != "apk" && artifactKind != "aab")
+                    {
+                        throw new InvalidOperationException(
+                            "artifact_kind must be apk or aab.");
+                    }
+                    normalized["artifact_kind"] = artifactKind;
+                    break;
                 default:
                     throw new InvalidOperationException("Unknown Unity job kind: " + kind);
             }
@@ -968,6 +1201,17 @@ namespace DccMcp.Unity
                 throw new InvalidOperationException("Unsupported Unity text asset extension: " + extension);
             }
 
+            return ResolveProjectAssetPath(normalized);
+        }
+
+        internal static void EnsureProjectAssetPathSafe(string relativePath)
+        {
+            var fullPath = ResolveProjectAssetPath(NormalizeAssetPath(relativePath));
+            EnsureNoReparsePoints(fullPath);
+        }
+
+        private static string ResolveProjectAssetPath(string normalized)
+        {
             var projectPath = Path.GetDirectoryName(Application.dataPath) ?? string.Empty;
             var fullPath = Path.GetFullPath(Path.Combine(
                 projectPath,
@@ -980,7 +1224,7 @@ namespace DccMcp.Unity
                 : StringComparison.Ordinal;
             if (!fullPath.StartsWith(assetsRoot, comparison))
             {
-                throw new InvalidOperationException("Unity text asset path must stay below Assets.");
+                throw new InvalidOperationException("Unity asset path must stay below Assets.");
             }
             return fullPath;
         }
@@ -1331,6 +1575,7 @@ namespace DccMcp.Unity
             job.Remove("capture_after_frame");
             job.Remove("idle_since_utc");
             job.Remove("build_scenes");
+            job.Remove("android_original_build_app_bundle");
             job.Remove("test_report_path");
             job.Remove("test_report_relative_path");
             Touch(job);
@@ -1340,7 +1585,11 @@ namespace DccMcp.Unity
         {
             if ((string)job["kind"] == "project.run_tests")
             {
-                DccMcpTestRunner.ReleaseCallback((string)job["request_id"]);
+                DccMcpTestRunner.ReleaseCallback(
+                    (string)job["request_id"],
+                    job["test_report_path"] == null
+                        ? null
+                        : (string)job["test_report_path"]);
             }
             job["state"] = "failed";
             job["phase"] = "complete";
@@ -1352,6 +1601,7 @@ namespace DccMcp.Unity
             job.Remove("capture_after_frame");
             job.Remove("idle_since_utc");
             job.Remove("build_scenes");
+            RestoreAndroidBuildSettings(job);
             job.Remove("test_report_path");
             job.Remove("test_report_relative_path");
             Touch(job);
@@ -1462,6 +1712,17 @@ namespace DccMcp.Unity
             using (var sha256 = SHA256.Create())
             {
                 return BitConverter.ToString(sha256.ComputeHash(bytes))
+                    .Replace("-", string.Empty)
+                    .ToLowerInvariant();
+            }
+        }
+
+        private static string HashFile(string path)
+        {
+            using (var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read))
+            using (var sha256 = SHA256.Create())
+            {
+                return BitConverter.ToString(sha256.ComputeHash(stream))
                     .Replace("-", string.Empty)
                     .ToLowerInvariant();
             }

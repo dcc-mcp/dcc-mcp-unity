@@ -11,20 +11,21 @@ namespace DccMcp.Unity
     {
         private const string BridgeTypeName = "UnityTcp.Editor.Tools.ExecuteCustomTool";
         private const string ToolAssemblyName = "UnityTcp.CustomTool";
-        private const string ToolAttributeName =
-            "UnityTcp.Editor.Tools.ExecuteCustomTool+CustomToolAttribute";
 
         internal static JObject Inspect()
         {
             var bridgeType = FindBridgeType();
             var toolAssembly = FindToolAssembly();
-            var tools = new JArray(DiscoverToolNames(toolAssembly));
+            var toolNames = DiscoverRegisteredToolNames(bridgeType);
             return new JObject
             {
-                ["available"] = bridgeType != null && toolAssembly != null,
+                ["available"] = bridgeType != null && toolNames.Length > 0,
                 ["bridge_available"] = bridgeType != null,
                 ["generator_package_loaded"] = toolAssembly != null,
-                ["tools"] = tools,
+                ["tools"] = new JArray(toolNames),
+                ["tool_descriptions"] = DiscoverRegisteredToolDescriptions(
+                    bridgeType,
+                    toolNames),
             };
         }
 
@@ -45,15 +46,14 @@ namespace DccMcp.Unity
             }
 
             var bridgeType = FindBridgeType();
-            var toolAssembly = FindToolAssembly();
-            if (bridgeType == null || toolAssembly == null)
+            if (bridgeType == null)
             {
                 throw new InvalidOperationException(
-                    "Tuanjie AI generators are unavailable; install and load "
-                    + "cn.tuanjie.codely.bridge and cn.tuanjie.ai.generators.");
+                    "Tuanjie AI custom tools are unavailable; install and load "
+                    + "cn.tuanjie.codely.bridge and at least one CustomTool provider.");
             }
 
-            var availableTools = DiscoverToolNames(toolAssembly);
+            var availableTools = DiscoverRegisteredToolNames(bridgeType);
             if (!availableTools.Contains(toolName, StringComparer.Ordinal))
             {
                 throw new InvalidOperationException(
@@ -145,47 +145,105 @@ namespace DccMcp.Unity
                 assembly => assembly.GetName().Name == ToolAssemblyName);
         }
 
-        private static string[] DiscoverToolNames(Assembly toolAssembly)
+        internal static string[] DiscoverRegisteredToolNames(Type bridgeType)
         {
-            if (toolAssembly == null)
+            var getRegisteredTools = bridgeType?.GetMethod(
+                "GetRegisteredTools",
+                BindingFlags.Public | BindingFlags.Static,
+                null,
+                Type.EmptyTypes,
+                null);
+            if (getRegisteredTools == null)
             {
                 return new string[0];
             }
 
-            var names = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var type in GetLoadableTypes(toolAssembly))
+            var names = getRegisteredTools.Invoke(null, null) as IEnumerable<string>;
+            return names == null
+                ? new string[0]
+                : names
+                    .Where(name => !string.IsNullOrWhiteSpace(name))
+                    .Distinct(StringComparer.Ordinal)
+                    .OrderBy(name => name, StringComparer.Ordinal)
+                    .ToArray();
+        }
+
+        internal static JObject DiscoverRegisteredToolDescriptions(
+            Type bridgeType,
+            IEnumerable<string> toolNames)
+        {
+            var descriptions = new JObject();
+            foreach (var name in toolNames ?? new string[0])
             {
-                foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static))
+                descriptions[name] = JValue.CreateNull();
+            }
+
+            var attributeType = bridgeType?.GetNestedType(
+                "CustomToolAttribute",
+                BindingFlags.Public);
+            var nameProperty = attributeType?.GetProperty(
+                "Name",
+                BindingFlags.Public | BindingFlags.Instance);
+            var descriptionProperty = attributeType?.GetProperty(
+                "Description",
+                BindingFlags.Public | BindingFlags.Instance);
+            if (attributeType == null || nameProperty == null || descriptionProperty == null)
+            {
+                return descriptions;
+            }
+
+            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var assemblyName = assembly.GetName().Name;
+                if (!assemblyName.StartsWith("UnityTcp", StringComparison.Ordinal)
+                    && (assemblyName.StartsWith("System", StringComparison.Ordinal)
+                        || assemblyName.StartsWith("mscorlib", StringComparison.Ordinal)
+                        || assemblyName.StartsWith("Unity", StringComparison.Ordinal)
+                        || assemblyName.StartsWith("Newtonsoft", StringComparison.Ordinal)
+                        || assemblyName.StartsWith("netstandard", StringComparison.Ordinal)
+                        || assemblyName.StartsWith("Microsoft", StringComparison.Ordinal)))
                 {
-                    foreach (var attribute in method.GetCustomAttributes(false))
+                    continue;
+                }
+
+                Type[] types;
+                try
+                {
+                    types = assembly.GetTypes();
+                }
+                catch (ReflectionTypeLoadException exception)
+                {
+                    types = exception.Types.Where(type => type != null).ToArray();
+                }
+                catch
+                {
+                    continue;
+                }
+
+                foreach (var type in types)
+                {
+                    foreach (var method in type.GetMethods(BindingFlags.Public | BindingFlags.Static))
                     {
-                        if (attribute.GetType().FullName != ToolAttributeName)
+                        var attribute = method
+                            .GetCustomAttributes(attributeType, false)
+                            .FirstOrDefault();
+                        var name = attribute == null
+                            ? null
+                            : nameProperty.GetValue(attribute, null) as string;
+                        if (string.IsNullOrWhiteSpace(name) || descriptions.Property(name) == null)
                         {
                             continue;
                         }
-                        var name = (string)attribute.GetType().GetProperty("Name")?.GetValue(
-                            attribute,
-                            null);
-                        if (!string.IsNullOrWhiteSpace(name))
+
+                        var description = descriptionProperty.GetValue(attribute, null) as string;
+                        if (!string.IsNullOrWhiteSpace(description))
                         {
-                            names.Add(name);
+                            descriptions[name] = description;
                         }
                     }
                 }
             }
-            return names.OrderBy(name => name, StringComparer.Ordinal).ToArray();
-        }
-
-        private static IEnumerable<Type> GetLoadableTypes(Assembly assembly)
-        {
-            try
-            {
-                return assembly.GetTypes();
-            }
-            catch (ReflectionTypeLoadException exception)
-            {
-                return exception.Types.Where(type => type != null);
-            }
+            return descriptions;
         }
     }
 }
