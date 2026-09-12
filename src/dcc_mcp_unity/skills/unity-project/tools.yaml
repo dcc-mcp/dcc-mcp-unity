@@ -79,7 +79,8 @@ tools:
     source_file: scripts/configure_sprite_importer.py
     next-tools:
       on-success: [unity_project__inspect_project]
-      on-failure: [unity_diagnostics__read_console, dcc_diagnostics__audit_log]\n  - name: read_text_asset
+      on-failure: [unity_diagnostics__read_console, dcc_diagnostics__audit_log]
+  - name: read_text_asset
     description: Read one bounded UTF-8 source text asset below Assets without following reparse points. Accepted extensions are cs, json, txt, shader, cginc, asmdef, xml, uss, and uxml. Not for binary assets or arbitrary project files.
     input_schema:
       type: object
