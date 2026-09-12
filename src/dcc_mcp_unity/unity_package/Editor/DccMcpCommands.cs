@@ -119,7 +119,7 @@ namespace DccMcp.Unity
 
         private static bool IsUndoable(string method)
         {
-            return method == "scene.create_game_object" || method == "scene.set_transform" || method == "scene.delete_game_object"\n                || method == "components.add" || method == "components.remove" || method == "components.set";
+            return method == "scene.create_game_object" || method == "scene.set_transform" || method == "scene.delete_game_object"`r`n                || method == "components.add" || method == "components.remove" || method == "components.set";
         }
 
         private static void EnsureEditorReady(string method)
