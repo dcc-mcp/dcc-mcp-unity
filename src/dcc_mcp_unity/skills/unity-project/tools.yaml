@@ -29,6 +29,25 @@ tools:
     next-tools:
       on-success: [unity_project__inspect_project]
       on-failure: [dcc_diagnostics__screenshot, dcc_diagnostics__audit_log]
+  - name: search_assets
+    description: Search imported Unity assets by AssetDatabase query and return bounded GUID, path, and main type results. Use before editing or referencing an asset.
+    input_schema:
+      type: object
+      required: [query]
+      properties:
+        query: {type: string, minLength: 1, maxLength: 256}
+        max_results: {type: integer, minimum: 1, maximum: 500, default: 100}
+      additionalProperties: false
+    output_schema: {type: object}
+    read_only: true
+    destructive: false
+    idempotent: true
+    execution: sync
+    affinity: main
+    enforce_thread_affinity: true
+    timeout_hint_secs: 60
+    source_file: scripts/search_assets.py
+    next-tools: [unity_project__read_text_asset, unity_scene__inspect_scene]
   - name: read_text_asset
     description: Read one bounded UTF-8 source text asset below Assets without following reparse points. Accepted extensions are cs, json, txt, shader, cginc, asmdef, xml, uss, and uxml. Not for binary assets or arbitrary project files.
     input_schema:

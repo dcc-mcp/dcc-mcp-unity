@@ -35,6 +35,13 @@ The Editor package reconnects to the loopback bridge at `ws://127.0.0.1:3852`; s
 to override it. `DCC_MCP_UNITY_BRIDGE_TIMEOUT` may increase the 60-second RPC timeout but cannot
 lower it; queued Editor work expires first so timed-out mutations are not executed later.
 
+The live tool surface includes project readiness and asset search, bounded source reads and
+compare-and-swap writes, scene hierarchy inspection, per-GameObject component inspection,
+undoable GameObject creation/deletion and transform edits, scene saves, Console reads, Play Mode,
+Game View capture, Unity Test Framework runs, and Windows player builds. Asset search returns GUID,
+path, and main asset type; component inspection intentionally reports stable type/state metadata
+without exposing an unconstrained serialized-property writer.
+
 The default bridge targets one Unity Editor. For concurrent Editors, run one adapter per Editor and
 assign each pair a unique bridge port and URL before starting either process.
 

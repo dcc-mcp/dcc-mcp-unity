@@ -53,14 +53,23 @@ namespace DccMcp.Unity
                     case "scene.inspect":
                         result = InspectScene(parameters);
                         break;
+                    case "scene.inspect_game_object":
+                        result = InspectGameObject(parameters);
+                        break;
                     case "scene.create_game_object":
                         result = CreateGameObject(parameters);
+                        break;
+                    case "scene.delete_game_object":
+                        result = DeleteGameObject(parameters);
                         break;
                     case "scene.set_transform":
                         result = SetTransform(parameters);
                         break;
                     case "scene.save":
                         result = SaveScene();
+                        break;
+                    case "assets.search":
+                        result = SearchAssets(parameters);
                         break;
                     case "editor.read_console":
                         result = DccMcpConsole.Read(parameters);
@@ -94,13 +103,14 @@ namespace DccMcp.Unity
 
         private static bool IsUndoable(string method)
         {
-            return method == "scene.create_game_object" || method == "scene.set_transform";
+            return method == "scene.create_game_object" || method == "scene.set_transform" || method == "scene.delete_game_object";
         }
 
         private static void EnsureEditorReady(string method)
         {
             var mutating = method == "assets.refresh"
                 || method == "scene.create_game_object"
+                || method == "scene.delete_game_object"
                 || method == "scene.set_transform"
                 || method == "scene.save"
                 || method == "tuanjie_ai.execute";
@@ -251,6 +261,60 @@ namespace DccMcp.Unity
                 ["instance_id"] = WriteObjectId(DccMcpObjectIdentity.GetId(gameObject)),
                 ["parent_instance_id"] = WriteObjectId(parentId),
             };
+        }
+
+        private static JObject InspectGameObject(JObject parameters)
+        {
+            var instanceId = RequireObjectId(parameters, "instance_id");
+            var gameObject = ResolveGameObject(instanceId);
+            var components = new JArray();
+            foreach (var component in gameObject.GetComponents<Component>())
+            {
+                if (component == null) { continue; }
+                var item = new JObject
+                {
+                    ["type"] = component.GetType().FullName,
+                    ["name"] = component.GetType().Name,
+                };
+                var behaviour = component as Behaviour;
+                if (behaviour != null) { item["enabled"] = behaviour.enabled; }
+                components.Add(item);
+            }
+            return new JObject
+            {
+                ["instance_id"] = WriteObjectId(instanceId),
+                ["name"] = gameObject.name,
+                ["active"] = gameObject.activeSelf,
+                ["tag"] = gameObject.tag,
+                ["layer"] = gameObject.layer,
+                ["components"] = components,
+                ["child_count"] = gameObject.transform.childCount,
+            };
+        }
+
+        private static JObject DeleteGameObject(JObject parameters)
+        {
+            var instanceId = RequireObjectId(parameters, "instance_id");
+            var gameObject = ResolveGameObject(instanceId);
+            var name = gameObject.name;
+            Undo.DestroyObjectImmediate(gameObject);
+            return new JObject { ["deleted"] = true, ["instance_id"] = WriteObjectId(instanceId), ["name"] = name };
+        }
+
+        private static JObject SearchAssets(JObject parameters)
+        {
+            var query = RequireString(parameters, "query");
+            var maxResults = ReadOptionalInt(parameters, "max_results", 100);
+            if (maxResults < 1 || maxResults > 500) throw new InvalidOperationException("max_results must be between 1 and 500.");
+            var results = new JArray();
+            foreach (var guid in AssetDatabase.FindAssets(query))
+            {
+                if (results.Count >= maxResults) break;
+                var path = AssetDatabase.GUIDToAssetPath(guid);
+                var assetType = AssetDatabase.GetMainAssetTypeAtPath(path);
+                results.Add(new JObject { ["guid"] = guid, ["path"] = path, ["type"] = assetType == null ? string.Empty : assetType.FullName });
+            }
+            return new JObject { ["query"] = query, ["assets"] = results, ["truncated"] = results.Count >= maxResults };
         }
 
         private static JObject SetTransform(JObject parameters)
