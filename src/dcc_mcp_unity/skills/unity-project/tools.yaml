@@ -57,7 +57,7 @@ tools:
         path:
           type: string
           maxLength: 512
-          pattern: '^Assets(?:/(?!\\. {1,2}(?:/|$))[^/\\]+)+\.png$'
+          pattern: '^Assets(?:/(?!\.{1,2}(?:/|$))[^/\\]+)+\.png$'
         pixels_per_unit:
           type: integer
           minimum: 1
