@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.14.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.13.0...v0.14.0) (2026-09-12)
+
+
+### Features
+
+* add bounded serialized component editing ([a2341ef](https://github.com/dcc-mcp/dcc-mcp-unity/commit/a2341ef39e4ec4f43d0a52ad6086aeac5867a52a))
+* add Unity asset and component authoring tools ([31b1257](https://github.com/dcc-mcp/dcc-mcp-unity/commit/31b12573bcdd59ef71cf014d5ab492f713cb9524))
+* add Unity asset and component authoring tools ([7c8a19c](https://github.com/dcc-mcp/dcc-mcp-unity/commit/7c8a19c354acbfa7ea6af8cc7c47a9744a3613d5))
+* add verified Android device workflows and mobile intake ([4230320](https://github.com/dcc-mcp/dcc-mcp-unity/commit/42303207751114b40502c67dd32d018554898f4f))
+
+
+### Bug Fixes
+
+* allow opaque integer and string component targets ([d77c85a](https://github.com/dcc-mcp/dcc-mcp-unity/commit/d77c85af35bb34776358993dabe37d5aaef7e833))
+* correct sprite path regex ([3eba765](https://github.com/dcc-mcp/dcc-mcp-unity/commit/3eba7650bb848a86c559295b11f4dfd1db769f6d))
+* correct Unity command formatting ([d945517](https://github.com/dcc-mcp/dcc-mcp-unity/commit/d945517a30006c283b356a845b79f08fc4bc8f65))
+* preserve legacy GameObject IDs in component discovery ([5a8c018](https://github.com/dcc-mcp/dcc-mcp-unity/commit/5a8c01887330172ffb7e8ce22e03bd34d73e575a))
+* publish Android tool safety annotations ([454f56b](https://github.com/dcc-mcp/dcc-mcp-unity/commit/454f56b86aa79a3615018e56c5b5596ebd4fc6fe))
+* publish component tool safety annotations ([38fbe09](https://github.com/dcc-mcp/dcc-mcp-unity/commit/38fbe09919f22bfcaede723c7078fe5cd87fd2be))
+* remove escaped CSharp newline ([fe19ca4](https://github.com/dcc-mcp/dcc-mcp-unity/commit/fe19ca4ca3f489deece24fb287b8836486736e55))
+* remove escaped yaml newline ([236d084](https://github.com/dcc-mcp/dcc-mcp-unity/commit/236d084b8c3adf349fe76b2466b0cc262de7ef81))
+* repair project tool schema yaml ([ddc1212](https://github.com/dcc-mcp/dcc-mcp-unity/commit/ddc1212f2cd06df66bd8ab159a8d176524ecc396))
+* report unavailable legacy asset dirty state ([69719f6](https://github.com/dcc-mcp/dcc-mcp-unity/commit/69719f60a690e2f5c733e0dd83df96e6123022fb))
+* resolve active Unity SDK and test failure receipts ([5ee4d0c](https://github.com/dcc-mcp/dcc-mcp-unity/commit/5ee4d0c90c43aef9c9493b8468ebf523a32e85b8))
+* restore project tool yaml boundaries ([04b3b81](https://github.com/dcc-mcp/dcc-mcp-unity/commit/04b3b817bc3a15a49302843e7a10a6192e3cf557))
+* restore sprite path validation regex ([fba64b4](https://github.com/dcc-mcp/dcc-mcp-unity/commit/fba64b419cf1b4d1f2b8f9e19a562f0a8c39e7a1))
+* support Unity 2018 serialized property APIs ([a37d341](https://github.com/dcc-mcp/dcc-mcp-unity/commit/a37d341224ce3903a51c780cc39a98e3f3544a04))
+* validate reference types and cover sprite authoring ([932af7c](https://github.com/dcc-mcp/dcc-mcp-unity/commit/932af7c34f6d6ed38cde467f2105ae8d7c30d6fe))
+
 ## [0.13.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.12.0...v0.13.0) (2026-08-23)
 
 
