@@ -577,7 +577,7 @@ namespace DccMcp.Unity
                 "Windows x64",
                 BuildTargetGroup.Standalone,
                 BuildTarget.StandaloneWindows64,
-                null);
+                EnsureWindowsBuildToolchain);
             if (scenes == null)
             {
                 return;
@@ -628,6 +628,15 @@ namespace DccMcp.Unity
                 ["bytes"] = (long)report.summary.totalSize,
                 ["executable_bytes"] = new FileInfo(outputPath).Length,
             });
+        }
+
+        private static void EnsureWindowsBuildToolchain()
+        {
+            DccMcpWindowsToolchain.Ensure(
+                PlayerSettings.GetScriptingBackend(BuildTargetGroup.Standalone) == ScriptingImplementation.IL2CPP,
+                Application.platform == RuntimePlatform.WindowsEditor,
+                BuildPipeline.IsBuildTargetSupported(BuildTargetGroup.Standalone, BuildTarget.StandaloneWindows64),
+                () => DccMcpWindowsToolchain.InspectCompiler(EditorApplication.applicationContentsPath));
         }
 
         private static void AdvanceAndroidBuild(JObject store, JObject job)
