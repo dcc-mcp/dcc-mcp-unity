@@ -16,7 +16,7 @@ scripting runtime is required when using Unity 2018.4.
 
 **dcc-mcp-unity** — Unity Editor adapter and typed game-authoring skills for DCC-MCP.
 
-It is one of **38 host adapters** in the DCC-MCP catalog. Every adapter speaks the same
+It is one of **47 host adapters** in the DCC-MCP catalog. Every adapter speaks the same
 MCP protocol and builds on the same core runtime contract; each one exposes the tools
 its own host needs on top of that.
 
