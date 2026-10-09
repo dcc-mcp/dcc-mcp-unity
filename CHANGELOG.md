@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.14.1](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.14.0...v0.14.1) (2026-10-09)
+
+
+### Documentation
+
+* **readme:** add the generated DCC-MCP host matrix pointer ([647cc10](https://github.com/dcc-mcp/dcc-mcp-unity/commit/647cc10eeb238881d329e2e587873ffa5cea716f))
+* regenerate host matrix pointer block from the current catalog ([28dae7c](https://github.com/dcc-mcp/dcc-mcp-unity/commit/28dae7cd11c7724c2f75598b6268c9b2c081466f))
+
 ## [0.14.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.13.0...v0.14.0) (2026-09-25)
 
 
