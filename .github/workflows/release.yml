@@ -76,6 +76,13 @@ jobs:
       - name: Install PyOxidizer
         run: python -m pip install pyoxidizer==0.24.0
       - name: Build standalone sidecar
+        env:
+          # Optional: provision this exact CLI/toolchain on the runner separately.
+          # Empty variables preserve the ordinary PyOxidizer build environment.
+          DCC_MCP_UNITY_MSVC_KIT: ${{ runner.os == 'Windows' && vars.DCC_MCP_UNITY_MSVC_KIT || '' }}
+          DCC_MCP_UNITY_MSVC_KIT_DIR: ${{ runner.os == 'Windows' && vars.DCC_MCP_UNITY_MSVC_KIT_DIR || '' }}
+          DCC_MCP_UNITY_MSVC_VERSION: ${{ runner.os == 'Windows' && vars.DCC_MCP_UNITY_MSVC_VERSION || '' }}
+          DCC_MCP_UNITY_SDK_VERSION: ${{ runner.os == 'Windows' && vars.DCC_MCP_UNITY_SDK_VERSION || '' }}
         run: python tools/build_binary.py
       - name: Archive standalone (Unix)
         if: runner.os != 'Windows'
