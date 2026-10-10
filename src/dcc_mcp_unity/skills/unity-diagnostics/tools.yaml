@@ -95,6 +95,102 @@ tools:
     next-tools:
       on-success: [unity_diagnostics__read_console]
       on-failure: [unity_diagnostics__read_console, dcc_diagnostics__audit_log]
+  - name: inspect_dirty_assets
+    description: Return one complete main-thread snapshot of currently loaded persistent dirty objects with exact untruncated descriptors and owner/session/assembly identity. Does not load, refresh, save, discard, or infer ownership/saveability. Complete refers to returned membership; unknown identity fields remain explicit. Unsupported dirty APIs, scan failures, or a result above 768 KiB fail closed without returning a prefix.
+    input_schema: {type: object, properties: {}, additionalProperties: false}
+    output_schema:
+      type: "object"
+      required: ["success","message","prompt","error","context"]
+      properties:
+        success: {"type":"boolean"}
+        message: {"type":"string"}
+        prompt: {"type":["string","null"]}
+        error: {"type":["string","null"]}
+        context:
+          type: "object"
+          properties:
+            schema_version: {"const":1}
+            capture_id: {"type":"string","pattern":"^[0-9a-f]{32}$"}
+            sampled_at_utc: {"type":"string"}
+            owner:
+              type: "object"
+              required: ["process_id","project_path","engine_version","session_instance_id"]
+              properties:
+                process_id: {"type":"integer","minimum":1}
+                project_path: {"type":"string"}
+                engine_version: {"type":"string"}
+                session_instance_id: {"type":"string","pattern":"^[0-9a-f]{32}$"}
+              additionalProperties: false
+            source:
+              type: "object"
+              required: ["assembly_full_name","module_version_id"]
+              properties:
+                assembly_full_name: {"type":"string"}
+                module_version_id: {"type":"string"}
+              additionalProperties: false
+            dirty_persistent_count: {"type":["integer","null"],"minimum":0}
+            items_count: {"type":"integer","minimum":0}
+            complete: {"type":"boolean"}
+            incomplete: {"type":"boolean"}
+            identity_complete: {"type":"boolean"}
+            budget_bytes: {"const":786432}
+            required_bytes: {"type":["integer","null"],"minimum":0}
+            error_code: {"type":["string","null"]}
+            error_message: {"type":["string","null"]}
+            items:
+              type: "array"
+              items:
+                type: "object"
+                additionalProperties: false
+                required: ["object_id","type","name","path","hide_flags","is_main_asset","is_sub_asset","is_persistent","is_dirty","asset_identity_status","asset_guid","local_file_id","asset_identity_reason","global_object_id_status","global_object_id","global_object_id_reason","field_errors","identity_complete"]
+                properties:
+                  object_id: {"type":["string","null"]}
+                  type: {"type":["string","null"]}
+                  name: {"type":["string","null"]}
+                  path: {"type":["string","null"]}
+                  hide_flags: {"type":["integer","null"]}
+                  is_main_asset: {"type":["boolean","null"]}
+                  is_sub_asset: {"type":["boolean","null"]}
+                  is_persistent: {"const":true}
+                  is_dirty: {"const":true}
+                  asset_identity_status: {"enum":["known","unknown"]}
+                  asset_guid: {"type":["string","null"]}
+                  local_file_id: {"type":["string","null"],"pattern":"^-?[0-9]+$"}
+                  asset_identity_reason: {"type":["string","null"]}
+                  global_object_id_status: {"enum":["known","unknown"]}
+                  global_object_id: {"type":["string","null"]}
+                  global_object_id_reason: {"type":["string","null"]}
+                  field_errors:
+                    type: "object"
+                    additionalProperties: {"type":"string"}
+                  identity_complete: {"type":"boolean"}
+      allOf:
+        -
+          if:
+            properties:
+              success: {"const":true}
+            required: ["success"]
+          then:
+            properties:
+              context:
+                required: ["schema_version","capture_id","sampled_at_utc","owner","source","dirty_persistent_count","items_count","complete","incomplete","identity_complete","budget_bytes","required_bytes","error_code","error_message","items"]
+                properties:
+                  complete: {"const":true}
+                  incomplete: {"const":false}
+                  dirty_persistent_count: {"type":"integer","minimum":0}
+                  error_code: {"type":"null"}
+                  error_message: {"type":"null"}
+    read_only: true
+    destructive: false
+    idempotent: true
+    execution: sync
+    affinity: main
+    enforce_thread_affinity: true
+    timeout_hint_secs: 60
+    source_file: scripts/inspect_dirty_assets.py
+    next-tools:
+      on-success: [unity_project__inspect_project]
+      on-failure: [unity_diagnostics__read_console]
   - name: capture_game_view
     description: Queue an active, unpaused Play-Mode-only Game View PNG capture to a fixed request-specific path below Builds/DccMcp/Captures and keep the Core job open until completion. The Editor focuses Game View, waits for a rendered frame, and succeeds only after Unity decodes a nonzero PNG within the 32-MiB, 8192-pixel-per-axis, and 32M-pixel limits.
     input_schema:
