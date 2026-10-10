@@ -9,7 +9,6 @@ using UnityEngine.SceneManagement;
 
 namespace DccMcp.Unity
 {
-    [InitializeOnLoad]
     public static class DccMcpCommands
     {
         private static int editorThreadId;
@@ -22,6 +21,7 @@ namespace DccMcp.Unity
         [InitializeOnLoadMethod]
         private static void InitializeEditorThread()
         {
+            if (DccMcpBridge.IsImportWorkerOrBatchMode()) return;
             Volatile.Write(ref editorThreadId, Thread.CurrentThread.ManagedThreadId);
         }
 
