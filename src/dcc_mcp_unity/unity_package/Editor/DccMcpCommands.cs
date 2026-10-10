@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Threading;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -8,14 +9,27 @@ using UnityEngine.SceneManagement;
 
 namespace DccMcp.Unity
 {
-    internal static class DccMcpCommands
+    public static class DccMcpCommands
     {
+        private static int editorThreadId;
         private const int DefaultSceneNodes = 1000;
         private const int MaxSceneNodes = 5000;
         private const int MaxSnapshotTextCharacters = 512;
 
-        internal static JObject Execute(string method, JObject parameters)
+        // Only Unity's domain-load callback establishes thread ownership. A first
+        // call from a worker must not initialize itself as the Editor thread.
+        [InitializeOnLoadMethod]
+        private static void InitializeEditorThread()
         {
+            if (DccMcpBridge.IsImportWorkerOrBatchMode()) return;
+            Volatile.Write(ref editorThreadId, Thread.CurrentThread.ManagedThreadId);
+        }
+
+        public static JObject Execute(string method, JObject parameters)
+        {
+            var ownerThreadId = Volatile.Read(ref editorThreadId);
+            if (ownerThreadId == 0 || Thread.CurrentThread.ManagedThreadId != ownerThreadId)
+                throw new InvalidOperationException("Unity commands require the initialized Editor main thread.");
             EnsureEditorReady(method);
             var undoable = IsUndoable(method);
             var undoGroup = -1;
@@ -88,6 +102,9 @@ namespace DccMcp.Unity
                         break;
                     case "editor.read_console":
                         result = DccMcpConsole.Read(parameters);
+                        break;
+                    case "editor.inspect_dirty_assets":
+                        result = DccMcpDirtyAssets.Inspect(parameters);
                         break;
                     case "tuanjie_ai.inspect":
                         result = DccMcpTuanjieAi.Inspect();
