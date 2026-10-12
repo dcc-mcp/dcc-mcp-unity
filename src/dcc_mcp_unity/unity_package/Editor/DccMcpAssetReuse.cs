@@ -69,18 +69,17 @@ namespace DccMcp.Unity
 
         private static Scene ExactScene(JObject p)
         {
-            var handle = (int?)p["scene_handle"];
-            if (!handle.HasValue) throw new InvalidOperationException("scene_handle is required.");
+            var handle = DccMcpSceneIdentity.Require(p);
             var scene = default(Scene);
             for (var i = 0; i < SceneManager.sceneCount; i++)
-                if (SceneManager.GetSceneAt(i).handle == handle.Value) scene = SceneManager.GetSceneAt(i);
+                if (DccMcpSceneIdentity.GetId(SceneManager.GetSceneAt(i)) == handle) scene = SceneManager.GetSceneAt(i);
             if (!scene.IsValid() || !scene.isLoaded) throw new InvalidOperationException("Scene handle is stale.");
             return scene;
         }
 
         private static JObject SceneInfo(Scene scene)
         {
-            return new JObject { ["scene_handle"] = scene.handle, ["path"] = scene.path,
+            return new JObject { ["scene_handle"] = DccMcpSceneIdentity.GetId(scene), ["path"] = scene.path,
                 ["dirty"] = scene.isDirty, ["root_count"] = scene.rootCount };
         }
 

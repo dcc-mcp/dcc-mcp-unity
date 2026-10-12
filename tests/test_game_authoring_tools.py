@@ -34,6 +34,28 @@ def _load_script(skill: str, name: str):
         ("unity-scene", "inspect_asset", "assets.inspect", {"path": "Assets/A.prefab"}),
         ("unity-scene", "create_isolated_scene", "scene.create_isolated", {}),
         ("unity-scene", "reopen_exact_scene", "scene.reopen_exact", {"scene_handle": 42}),
+        (
+            "unity-scene",
+            "reopen_exact_scene",
+            "scene.reopen_exact",
+            {"scene_handle": "18446744073709551615"},
+        ),
+        (
+            "unity-scene",
+            "save_exact_scene",
+            "scene.save_exact",
+            {"scene_handle": "18446744073709551615", "path": "Assets/Layout.unity"},
+        ),
+        (
+            "unity-scene",
+            "instantiate_prefab",
+            "scene.instantiate_prefab",
+            {
+                "scene_handle": "18446744073709551615",
+                "path": "Assets/Module.prefab",
+                "expected_dependency_hash": "a" * 32,
+            },
+        ),
         ("unity-scene", "list_components", "components.list", {"instance_id": -123}),
         ("unity-scene", "list_components", "components.list", {"instance_id": "123"}),
         (
@@ -190,6 +212,33 @@ def test_game_authoring_manifests_declare_the_bounded_surface():
     assert project.count("pattern: '") >= 5
     assert "deferred_hint: true" not in project + diagnostics
     assert "queued/running/completed" not in project
+
+
+@pytest.mark.parametrize("name", ["instantiate_prefab", "save_exact_scene", "reopen_exact_scene"])
+def test_scene_handle_schemas_preserve_decimal_strings_and_bound_legacy_integers(name):
+    manifest = yaml.safe_load((SKILLS / "unity-scene" / "tools.yaml").read_text("utf-8"))
+    tool = next(tool for tool in manifest["tools"] if tool["name"] == name)
+    schema = tool["input_schema"]["properties"]["scene_handle"]
+    validator = Draft7Validator(schema)
+    for value in ("18446744073709551615", "9007199254740993", "-2147483648", 42, -2147483648):
+        assert validator.is_valid(value), value
+    for value in (None, True, 42.5, 2147483648, 9007199254740993, "", "1e3", " 42", "+42"):
+        assert not validator.is_valid(value), value
+
+
+def test_scene_handle_wire_conversion_is_shared_and_does_not_narrow_to_int():
+    editor = ROOT / "src" / "dcc_mcp_unity" / "unity_package" / "Editor"
+    identity = (editor / "DccMcpSceneIdentity.cs").read_text("utf-8")
+    commands = (editor / "DccMcpCommands.cs").read_text("utf-8")
+    reuse = (editor / "DccMcpAssetReuse.cs").read_text("utf-8")
+    assert "#if UNITY_6000_5_OR_NEWER" in identity
+    assert "scene.handle.GetRawData().ToString(CultureInfo.InvariantCulture)" in identity
+    assert "scene.handle.ToString(CultureInfo.InvariantCulture)" in identity
+    assert "DccMcpSceneIdentity.Require(p)" in reuse
+    assert '["scene_handle"] = DccMcpSceneIdentity.GetId(scene)' in commands
+    assert '["scene_handle"] = DccMcpSceneIdentity.GetId(scene)' in reuse
+    assert '(int?)p["scene_handle"]' not in reuse
+    assert ".handle == handle.Value" not in reuse
 
 
 def test_project_asset_schemas_reject_traversal_and_backslashes():

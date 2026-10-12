@@ -303,7 +303,7 @@ namespace DccMcp.Unity
             return new JObject
             {
                 ["scene_name"] = scene.name,
-                ["scene_handle"] = scene.handle,
+                ["scene_handle"] = DccMcpSceneIdentity.GetId(scene),
                 ["scene_path"] = scene.path,
                 ["dirty"] = scene.isDirty,
                 ["roots"] = roots,

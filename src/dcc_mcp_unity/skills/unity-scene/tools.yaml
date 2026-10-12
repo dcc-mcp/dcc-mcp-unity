@@ -383,7 +383,15 @@ tools:
           minLength: 1
           maxLength: 512
         scene_handle:
-          type: integer
+          description: Opaque decimal scene ID from fresh inspection; preserve as a string.
+            Legacy 32-bit integer input remains accepted.
+          oneOf:
+          - type: string
+            pattern: "^-?[0-9]+$"
+            maxLength: 20
+          - type: integer
+            minimum: -2147483648
+            maximum: 2147483647
         expected_dependency_hash:
           type: string
           minLength: 32
@@ -437,7 +445,15 @@ tools:
           minLength: 1
           maxLength: 512
         scene_handle:
-          type: integer
+          description: Opaque decimal scene ID from fresh inspection; preserve as a string.
+            Legacy 32-bit integer input remains accepted.
+          oneOf:
+          - type: string
+            pattern: "^-?[0-9]+$"
+            maxLength: 20
+          - type: integer
+            minimum: -2147483648
+            maximum: 2147483647
       additionalProperties: false
       required:
       - path
@@ -462,7 +478,15 @@ tools:
       type: object
       properties:
         scene_handle:
-          type: integer
+          description: Opaque decimal scene ID from fresh inspection; preserve as a string.
+            Legacy 32-bit integer input remains accepted.
+          oneOf:
+          - type: string
+            pattern: "^-?[0-9]+$"
+            maxLength: 20
+          - type: integer
+            minimum: -2147483648
+            maximum: 2147483647
       additionalProperties: false
       required:
       - scene_handle

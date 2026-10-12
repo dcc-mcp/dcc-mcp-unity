@@ -61,3 +61,8 @@ with `set_transform` to arrange instances. Save only that scene with `save_exact
 to an existing Assets folder. `reopen_exact_scene` refuses dirty scenes and reads the
 saved scene from disk; use its new handle and fresh hierarchy IDs afterward.
 Keep another scene loaded during reopen. Never automatically retry mutations.
+
+Scene handles are opaque decimal strings, scoped to the current Editor session.
+Pass them through unchanged, including on Unity 6.5 where they can exceed safe JSON
+integer precision. Legacy 32-bit integer input remains accepted. Reinspect after
+reopening; a handle must never be replaced with the active scene when it is stale.
