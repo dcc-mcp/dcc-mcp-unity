@@ -10,6 +10,8 @@ namespace DccMcp.Unity
 {
     internal static class DccMcpAssetReuse
     {
+        internal static bool IsSavingScene { get; private set; }
+
         private static string AssetPath(JObject p)
         {
             var path = (string)p["path"];
@@ -124,8 +126,44 @@ namespace DccMcp.Unity
                 throw new InvalidOperationException("Refusing to overwrite another scene asset.");
             if (!AssetDatabase.IsValidFolder(Path.GetDirectoryName(path).Replace('\\', '/')))
                 throw new InvalidOperationException("Destination folder must already exist.");
-            if (!EditorSceneManager.SaveScene(scene, path)) throw new InvalidOperationException("Scene save failed.");
-            return SceneInfo(scene);
+            if (IsSavingScene) throw new InvalidOperationException("Reentrant exact scene saves are disabled.");
+            IsSavingScene = true;
+            try
+            {
+                // Unity's native scene save can flush unrelated dirty assets.
+                // Capture immediately in this main-thread call; never trust an
+                // earlier client snapshot or save/restore those assets afterward.
+                var snapshot = DccMcpDirtyAssets.Inspect(new JObject());
+                RequireCleanLoadedAssets(snapshot);
+                if (!EditorSceneManager.SaveScene(scene, path)) throw new InvalidOperationException("Scene save failed.");
+                var result = SceneInfo(scene);
+                result["asset_preflight_capture_id"] = snapshot["capture_id"];
+                result["asset_preflight_scope"] = "loaded_persistent_objects";
+                return result;
+            }
+            finally
+            {
+                IsSavingScene = false;
+            }
+        }
+
+        internal static void RequireCleanLoadedAssets(JObject snapshot)
+        {
+            if (snapshot == null
+                || !JToken.DeepEquals(snapshot["schema_version"], new JValue(1))
+                || !JToken.DeepEquals(snapshot["complete"], new JValue(true))
+                || !JToken.DeepEquals(snapshot["incomplete"], new JValue(false))
+                || !JToken.DeepEquals(snapshot["identity_complete"], new JValue(true))
+                || snapshot["error_code"] == null || snapshot["error_code"].Type != JTokenType.Null
+                || snapshot["error_message"] == null || snapshot["error_message"].Type != JTokenType.Null)
+                throw new InvalidOperationException("Exact scene save cannot establish loaded persistent asset state: "
+                    + (snapshot == null ? "snapshot_unavailable" : (string)snapshot["error_code"] ?? "snapshot_incomplete") + ".");
+            var items = snapshot["items"] as JArray;
+            if (!JToken.DeepEquals(snapshot["dirty_persistent_count"], new JValue(0))
+                || !JToken.DeepEquals(snapshot["items_count"], new JValue(0))
+                || items == null || items.Count != 0)
+                throw new InvalidOperationException("Exact scene save refuses existing loaded persistent dirty assets. "
+                    + "Inspect them and explicitly resolve their changes before saving the scene.");
         }
 
         internal static JObject ReopenScene(JObject p)

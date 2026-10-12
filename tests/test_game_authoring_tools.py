@@ -241,6 +241,21 @@ def test_scene_handle_wire_conversion_is_shared_and_does_not_narrow_to_int():
     assert ".handle == handle.Value" not in reuse
 
 
+def test_exact_scene_save_reuses_complete_dirty_snapshot_before_native_save():
+    editor = ROOT / "src" / "dcc_mcp_unity" / "unity_package" / "Editor"
+    reuse = (editor / "DccMcpAssetReuse.cs").read_text("utf-8")
+    commands = (editor / "DccMcpCommands.cs").read_text("utf-8")
+    snapshot = reuse.index("DccMcpDirtyAssets.Inspect(new JObject())")
+    guard = reuse.index("RequireCleanLoadedAssets(snapshot)", snapshot)
+    native = reuse.index("EditorSceneManager.SaveScene(scene, path)", guard)
+    assert snapshot < guard < native
+    assert "IsSavingScene = false;" in reuse
+    assert "DccMcpAssetReuse.IsSavingScene" in commands
+    assert "scene.save_exact" in commands and "editor.inspect_dirty_assets" in commands
+    assert "SaveAssets(" not in reuse
+    assert "EditorUtility.SetDirty" not in reuse
+
+
 def test_project_asset_schemas_reject_traversal_and_backslashes():
     manifest = yaml.safe_load((SKILLS / "unity-project" / "tools.yaml").read_text("utf-8"))
     tools = {tool["name"]: tool for tool in manifest["tools"]}

@@ -436,7 +436,10 @@ tools:
       deferred_hint: false
   - name: save_exact_scene
     description: Save only the specified scene below Assets. Refuse overwriting a different
-      existing scene asset.
+      existing scene asset. Immediately before native saving, require a complete, clean
+      loaded-persistent-asset snapshot; dirty, unknown, or unsupported state is refused.
+      Unity 2018.4 cannot establish this precondition. This is not a transaction against
+      arbitrary project save callbacks or external writers.
     input_schema:
       type: object
       properties:

@@ -66,3 +66,16 @@ Scene handles are opaque decimal strings, scoped to the current Editor session.
 Pass them through unchanged, including on Unity 6.5 where they can exceed safe JSON
 integer precision. Legacy 32-bit integer input remains accepted. Reinspect after
 reopening; a handle must never be replaced with the active scene when it is stale.
+
+Exact scene saving requires the complete dirty-asset snapshot implementation. Unity's
+native scene-save pipeline can also flush unrelated dirty persistent assets, so
+`save_exact_scene` takes a fresh snapshot synchronously immediately before saving and
+refuses nonzero, unknown, unsupported, or incomplete state. It does not save assets to
+make the check pass, and it never restores files or re-marks objects dirty afterward.
+Unity 2018.4 has no supported public dirty query and therefore refuses exact saves;
+do not fall back to `save_scene` automatically. Other scene operations remain available.
+
+The preflight covers currently loaded persistent objects only. It is not a guarantee
+against external writers or project callbacks that create or save new dirty state
+during native saving. Nested DCC commands are rejected during the exact-save call.
+Use a clean, disposable project with reviewed local content for isolated acceptance.

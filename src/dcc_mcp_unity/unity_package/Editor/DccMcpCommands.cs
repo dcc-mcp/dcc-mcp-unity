@@ -30,6 +30,8 @@ namespace DccMcp.Unity
             var ownerThreadId = Volatile.Read(ref editorThreadId);
             if (ownerThreadId == 0 || Thread.CurrentThread.ManagedThreadId != ownerThreadId)
                 throw new InvalidOperationException("Unity commands require the initialized Editor main thread.");
+            if (DccMcpAssetReuse.IsSavingScene)
+                throw new InvalidOperationException("Unity command reentrancy is disabled during an exact scene save.");
             EnsureEditorReady(method);
             var undoable = IsUndoable(method);
             var undoGroup = -1;

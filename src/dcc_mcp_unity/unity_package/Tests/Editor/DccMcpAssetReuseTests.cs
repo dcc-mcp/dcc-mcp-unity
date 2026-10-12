@@ -11,6 +11,7 @@ namespace DccMcp.Unity.Tests
     public sealed class DccMcpAssetReuseTests
     {
         private string Folder;
+        private Exception nestedSaveError;
 
         [SetUp]
         public void SetUp()
@@ -33,7 +34,7 @@ namespace DccMcp.Unity.Tests
         }
 
         [Test]
-        public void DiscoverInstantiateSaveReopenPreservesPrefabConnection()
+        public void DiscoverInstantiateReopenAndExactSaveCapabilityRoundTrip()
         {
             var found = DccMcpCommands.Execute("assets.find", new JObject { ["root"] = Folder });
             Assert.AreEqual(1, (int)found["total"]);
@@ -49,7 +50,21 @@ namespace DccMcp.Unity.Tests
             Assert.AreEqual(1, (int)created["root_count"]);
             Assert.Throws<InvalidOperationException>(() => DccMcpCommands.Execute("scene.reopen_exact", scene));
             var save = new JObject { ["scene_handle"] = scene["scene_handle"], ["path"] = Folder + "/Layout.unity" };
-            DccMcpCommands.Execute("scene.save_exact", save);
+            if (DccMcpDirtyAssets.SupportsDirtyQuery)
+            {
+                var saved = DccMcpCommands.Execute("scene.save_exact", save);
+                Assert.AreEqual("loaded_persistent_objects", (string)saved["asset_preflight_scope"]);
+                Assert.IsNotEmpty((string)saved["asset_preflight_capture_id"]);
+            }
+            else
+            {
+                Assert.That(() => DccMcpCommands.Execute("scene.save_exact", save),
+                    Throws.TypeOf<InvalidOperationException>().With.Message.Contains("dirty_query_unsupported"));
+                Assert.IsFalse(File.Exists(Folder + "/Layout.unity"));
+                // Seed a clean file through this disposable fixture, not the
+                // refused tool, so older Editors still exercise reopen identity.
+                EditorSceneManager.SaveScene(UnityEngine.SceneManagement.SceneManager.GetActiveScene(), Folder + "/Layout.unity");
+            }
             var reopened = DccMcpCommands.Execute("scene.reopen_exact", scene);
             Assert.AreEqual(JTokenType.String, reopened["scene_handle"].Type);
             Assert.AreNotEqual((string)scene["scene_handle"], (string)reopened["scene_handle"]);
@@ -74,7 +89,7 @@ namespace DccMcp.Unity.Tests
         }
 
         [Test]
-        public void SaveExactPreservesActiveDirtySiblingAndDirtyAsset()
+        public void SaveExactRefusesDirtyAssetsWithoutSavingOrDiscardingThem()
         {
             var sibling = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
             var siblingBytes = File.ReadAllBytes(sibling.path);
@@ -96,10 +111,13 @@ namespace DccMcp.Unity.Tests
             if (dirtyQuery != null)
                 Assert.IsTrue((bool)dirtyQuery.Invoke(null, new object[] { material }), "The fixture must be dirty before save.");
 
-            var saved = DccMcpCommands.Execute("scene.save_exact", new JObject {
-                ["scene_handle"] = target["scene_handle"], ["path"] = Folder + "/Target.unity" });
+            CollectionAssert.AreEqual(materialBytes, File.ReadAllBytes(materialPath), "Creation must not save the sentinel.");
+            var targetPath = Folder + "/Target.unity";
+            Assert.Throws<InvalidOperationException>(() => DccMcpCommands.Execute("scene.save_exact", new JObject {
+                ["scene_handle"] = target["scene_handle"], ["path"] = targetPath }));
 
-            Assert.IsFalse((bool)saved["dirty"]);
+            Assert.IsFalse(File.Exists(targetPath));
+            Assert.IsFalse(DccMcpAssetReuse.IsSavingScene, "The guard must reset after refusal.");
             Assert.IsTrue(sibling.isDirty);
             Assert.AreEqual(3123, material.renderQueue);
             // Unity 2018.4 has no public IsDirty(Object) API. Disk isolation and
@@ -108,6 +126,94 @@ namespace DccMcp.Unity.Tests
             Assert.AreEqual(sibling, UnityEngine.SceneManagement.SceneManager.GetActiveScene());
             CollectionAssert.AreEqual(siblingBytes, File.ReadAllBytes(sibling.path));
             CollectionAssert.AreEqual(materialBytes, File.ReadAllBytes(materialPath));
+        }
+
+        [Test]
+        public void CleanAssetSavePreservesTheActiveDirtySiblingOrRefusesUnsupportedEditors()
+        {
+            var sibling = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            var siblingBytes = File.ReadAllBytes(sibling.path);
+            new GameObject("Unsaved sibling root");
+            EditorSceneManager.MarkSceneDirty(sibling);
+            var target = DccMcpCommands.Execute("scene.create_isolated", new JObject());
+            var targetScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            new GameObject("Saved target root");
+            EditorSceneManager.MarkSceneDirty(targetScene);
+            UnityEngine.SceneManagement.SceneManager.SetActiveScene(sibling);
+            var path = Folder + "/CleanTarget.unity";
+            var input = new JObject { ["scene_handle"] = target["scene_handle"], ["path"] = path };
+            if (DccMcpDirtyAssets.SupportsDirtyQuery)
+            {
+                var result = DccMcpCommands.Execute("scene.save_exact", input);
+                Assert.IsFalse((bool)result["dirty"]);
+                Assert.IsTrue(File.Exists(path));
+            }
+            else
+            {
+                Assert.That(() => DccMcpCommands.Execute("scene.save_exact", input),
+                    Throws.TypeOf<InvalidOperationException>().With.Message.Contains("dirty_query_unsupported"));
+                Assert.IsTrue(targetScene.isDirty);
+                Assert.IsFalse(File.Exists(path));
+            }
+            Assert.IsTrue(sibling.isDirty);
+            Assert.AreEqual(sibling, UnityEngine.SceneManagement.SceneManager.GetActiveScene());
+            CollectionAssert.AreEqual(siblingBytes, File.ReadAllBytes(sibling.path));
+        }
+
+        private static JObject CleanSnapshot()
+        {
+            return new JObject { ["schema_version"] = 1, ["complete"] = true, ["incomplete"] = false,
+                ["identity_complete"] = true, ["dirty_persistent_count"] = 0, ["items_count"] = 0,
+                ["items"] = new JArray(), ["error_code"] = JValue.CreateNull(), ["error_message"] = JValue.CreateNull() };
+        }
+
+        private void TryNestedSave(UnityEngine.SceneManagement.Scene scene, string path)
+        {
+            try { DccMcpCommands.Execute("scene.save", new JObject()); }
+            catch (Exception exception) { nestedSaveError = exception; }
+        }
+
+        [Test]
+        public void NativeSaveCallbacksCannotReenterDccCommands()
+        {
+            var scene = DccMcpCommands.Execute("scene.inspect", new JObject());
+            var input = new JObject { ["scene_handle"] = scene["scene_handle"], ["path"] = Folder + "/Base.unity" };
+            if (!DccMcpDirtyAssets.SupportsDirtyQuery)
+            {
+                Assert.That(() => DccMcpCommands.Execute("scene.save_exact", input),
+                    Throws.TypeOf<InvalidOperationException>().With.Message.Contains("dirty_query_unsupported"));
+                Assert.IsFalse(DccMcpAssetReuse.IsSavingScene);
+                return;
+            }
+            nestedSaveError = null;
+            EditorSceneManager.sceneSaving += TryNestedSave;
+            try { DccMcpCommands.Execute("scene.save_exact", input); }
+            finally { EditorSceneManager.sceneSaving -= TryNestedSave; }
+            Assert.That(nestedSaveError, Is.TypeOf<InvalidOperationException>());
+            StringAssert.Contains("reentrancy", nestedSaveError.Message);
+            Assert.IsFalse(DccMcpAssetReuse.IsSavingScene);
+            Assert.IsTrue((bool)DccMcpCommands.Execute("host.ping", new JObject())["host_dispatch_ready"]);
+        }
+
+        [TestCase("unsupported")]
+        [TestCase("incomplete")]
+        [TestCase("unknown_identity")]
+        [TestCase("budget")]
+        [TestCase("unknown_count")]
+        [TestCase("dirty")]
+        [TestCase("missing_items")]
+        public void ExactSavePreflightRejectsUnknownOrNonemptySnapshots(string change)
+        {
+            var snapshot = CleanSnapshot();
+            if (change == "unsupported") snapshot["error_code"] = "dirty_query_unsupported";
+            if (change == "incomplete") snapshot["complete"] = false;
+            if (change == "unknown_identity") snapshot["identity_complete"] = false;
+            if (change == "budget") snapshot["error_code"] = "response_budget_exceeded";
+            if (change == "unknown_count") snapshot["dirty_persistent_count"] = JValue.CreateNull();
+            if (change == "dirty") snapshot["dirty_persistent_count"] = 1;
+            if (change == "missing_items") snapshot.Remove("items");
+            Assert.Throws<InvalidOperationException>(() => DccMcpAssetReuse.RequireCleanLoadedAssets(snapshot));
+            Assert.DoesNotThrow(() => DccMcpAssetReuse.RequireCleanLoadedAssets(CleanSnapshot()));
         }
 
         [Test]
