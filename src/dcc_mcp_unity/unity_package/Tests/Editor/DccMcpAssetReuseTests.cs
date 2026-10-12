@@ -85,22 +85,25 @@ namespace DccMcp.Unity.Tests
             AssetDatabase.CreateAsset(material, materialPath);
             AssetDatabase.SaveAssets();
             var materialBytes = File.ReadAllBytes(materialPath);
-            material.name = "Unsaved material edit";
+            material.renderQueue = 3123;
             EditorUtility.SetDirty(material);
             var target = DccMcpCommands.Execute("scene.create_isolated", new JObject());
             new GameObject("Saved target root");
             EditorSceneManager.MarkSceneDirty(UnityEngine.SceneManagement.SceneManager.GetActiveScene());
             UnityEngine.SceneManagement.SceneManager.SetActiveScene(sibling);
+            Assert.AreEqual(3123, material.renderQueue, "The fixture must retain its unsaved value before save.");
+            var dirtyQuery = typeof(EditorUtility).GetMethod("IsDirty", new[] { typeof(UnityEngine.Object) });
+            if (dirtyQuery != null)
+                Assert.IsTrue((bool)dirtyQuery.Invoke(null, new object[] { material }), "The fixture must be dirty before save.");
 
             var saved = DccMcpCommands.Execute("scene.save_exact", new JObject {
                 ["scene_handle"] = target["scene_handle"], ["path"] = Folder + "/Target.unity" });
 
             Assert.IsFalse((bool)saved["dirty"]);
             Assert.IsTrue(sibling.isDirty);
-            Assert.AreEqual("Unsaved material edit", material.name);
+            Assert.AreEqual(3123, material.renderQueue);
             // Unity 2018.4 has no public IsDirty(Object) API. Disk isolation and
             // the unsaved in-memory value are still checked on that version.
-            var dirtyQuery = typeof(EditorUtility).GetMethod("IsDirty", new[] { typeof(UnityEngine.Object) });
             if (dirtyQuery != null) Assert.IsTrue((bool)dirtyQuery.Invoke(null, new object[] { material }));
             Assert.AreEqual(sibling, UnityEngine.SceneManagement.SceneManager.GetActiveScene());
             CollectionAssert.AreEqual(siblingBytes, File.ReadAllBytes(sibling.path));
