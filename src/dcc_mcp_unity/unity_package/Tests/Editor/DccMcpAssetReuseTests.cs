@@ -52,6 +52,7 @@ namespace DccMcp.Unity.Tests
             var save = new JObject { ["scene_handle"] = scene["scene_handle"], ["path"] = Folder + "/Layout.unity" };
             if (DccMcpDirtyAssets.SupportsDirtyQuery)
             {
+                RequireCleanFixture();
                 var saved = DccMcpCommands.Execute("scene.save_exact", save);
                 Assert.AreEqual("loaded_persistent_objects", (string)saved["asset_preflight_scope"]);
                 Assert.IsNotEmpty((string)saved["asset_preflight_capture_id"]);
@@ -144,6 +145,7 @@ namespace DccMcp.Unity.Tests
             var input = new JObject { ["scene_handle"] = target["scene_handle"], ["path"] = path };
             if (DccMcpDirtyAssets.SupportsDirtyQuery)
             {
+                RequireCleanFixture();
                 var result = DccMcpCommands.Execute("scene.save_exact", input);
                 Assert.IsFalse((bool)result["dirty"]);
                 Assert.IsTrue(File.Exists(path));
@@ -167,6 +169,13 @@ namespace DccMcp.Unity.Tests
                 ["items"] = new JArray(), ["error_code"] = JValue.CreateNull(), ["error_message"] = JValue.CreateNull() };
         }
 
+        private static void RequireCleanFixture()
+        {
+            var snapshot = DccMcpDirtyAssets.Inspect(new JObject());
+            Assert.DoesNotThrow(() => DccMcpAssetReuse.RequireCleanLoadedAssets(snapshot),
+                "Disposable fixture did not establish clean loaded assets: " + snapshot.ToString());
+        }
+
         private void TryNestedSave(UnityEngine.SceneManagement.Scene scene, string path)
         {
             try { DccMcpCommands.Execute("scene.save", new JObject()); }
@@ -185,6 +194,7 @@ namespace DccMcp.Unity.Tests
                 Assert.IsFalse(DccMcpAssetReuse.IsSavingScene);
                 return;
             }
+            RequireCleanFixture();
             nestedSaveError = null;
             EditorSceneManager.sceneSaving += TryNestedSave;
             try { DccMcpCommands.Execute("scene.save_exact", input); }
