@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.15.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.14.0...v0.15.0) (2026-10-12)
+
+
+### Features
+
+* add local prefab discovery and isolated scene reuse ([#73](https://github.com/dcc-mcp/dcc-mcp-unity/issues/73)) ([309792f](https://github.com/dcc-mcp/dcc-mcp-unity/commit/309792f56b3eef4503ab648c30872f9cae8e24ac))
+* inspect complete dirty asset snapshots ([73f9777](https://github.com/dcc-mcp/dcc-mcp-unity/commit/73f9777d1574d71417bb834d67c62c746958163a))
+
+
+### Bug Fixes
+
+* preserve editor bootstrap contract ([dab464f](https://github.com/dcc-mcp/dcc-mcp-unity/commit/dab464f9a58cf3cc7e9a0db73270f8af95e66e6e))
+
+
+### Documentation
+
+* **readme:** add the generated DCC-MCP host matrix pointer ([647cc10](https://github.com/dcc-mcp/dcc-mcp-unity/commit/647cc10eeb238881d329e2e587873ffa5cea716f))
+* regenerate host matrix pointer block from the current catalog ([28dae7c](https://github.com/dcc-mcp/dcc-mcp-unity/commit/28dae7cd11c7724c2f75598b6268c9b2c081466f))
+
 ## [0.14.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.13.0...v0.14.0) (2026-09-25)
 
 
