@@ -247,7 +247,8 @@ namespace DccMcp.Unity.Tests
             }
             var bytes = File.ReadAllBytes(path);
             var scene = DccMcpCommands.Execute("scene.inspect", new JObject());
-            var scenePath = (string)scene["path"];
+            var scenePath = (string)scene["scene_path"];
+            Assert.AreEqual(Folder + "/Base.unity", scenePath);
             var sceneBytes = File.ReadAllBytes(scenePath);
             if (kind == "prefab") ((Transform)value).localPosition = Vector3.one;
             else if (kind == "subasset") ((Texture2D)value).anisoLevel = 7;
