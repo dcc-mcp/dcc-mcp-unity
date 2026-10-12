@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Security.Cryptography;
 using Newtonsoft.Json.Linq;
 using NUnit.Framework;
 using UnityEditor;
@@ -52,7 +54,7 @@ namespace DccMcp.Unity.Tests
             var save = new JObject { ["scene_handle"] = scene["scene_handle"], ["path"] = Folder + "/Layout.unity" };
             if (DccMcpDirtyAssets.SupportsDirtyQuery)
             {
-                RequireCleanFixture();
+                RequireSafeFixture();
                 var saved = DccMcpCommands.Execute("scene.save_exact", save);
                 Assert.AreEqual("loaded_persistent_objects", (string)saved["asset_preflight_scope"]);
                 Assert.IsNotEmpty((string)saved["asset_preflight_capture_id"]);
@@ -105,7 +107,8 @@ namespace DccMcp.Unity.Tests
             EditorUtility.SetDirty(material);
             var target = DccMcpCommands.Execute("scene.create_isolated", new JObject());
             new GameObject("Saved target root");
-            EditorSceneManager.MarkSceneDirty(UnityEngine.SceneManagement.SceneManager.GetActiveScene());
+            var targetScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            EditorSceneManager.MarkSceneDirty(targetScene);
             UnityEngine.SceneManagement.SceneManager.SetActiveScene(sibling);
             Assert.AreEqual(3123, material.renderQueue, "The fixture must retain its unsaved value before save.");
             var dirtyQuery = typeof(EditorUtility).GetMethod("IsDirty", new[] { typeof(UnityEngine.Object) });
@@ -114,12 +117,14 @@ namespace DccMcp.Unity.Tests
 
             CollectionAssert.AreEqual(materialBytes, File.ReadAllBytes(materialPath), "Creation must not save the sentinel.");
             var targetPath = Folder + "/Target.unity";
-            Assert.Throws<InvalidOperationException>(() => DccMcpCommands.Execute("scene.save_exact", new JObject {
+            var refusal = Assert.Throws<InvalidOperationException>(() => DccMcpCommands.Execute("scene.save_exact", new JObject {
                 ["scene_handle"] = target["scene_handle"], ["path"] = targetPath }));
+            StringAssert.Contains(DccMcpDirtyAssets.SupportsDirtyQuery ? materialPath : "dirty_query_unsupported", refusal.Message);
 
             Assert.IsFalse(File.Exists(targetPath));
             Assert.IsFalse(DccMcpAssetReuse.IsSavingScene, "The guard must reset after refusal.");
             Assert.IsTrue(sibling.isDirty);
+            Assert.IsTrue(targetScene.isDirty);
             Assert.AreEqual(3123, material.renderQueue);
             // Unity 2018.4 has no public IsDirty(Object) API. Disk isolation and
             // the unsaved in-memory value are still checked on that version.
@@ -134,21 +139,43 @@ namespace DccMcp.Unity.Tests
         {
             var sibling = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
             var siblingBytes = File.ReadAllBytes(sibling.path);
-            new GameObject("Unsaved sibling root");
+            var siblingRoot = new GameObject("Unsaved sibling root");
             EditorSceneManager.MarkSceneDirty(sibling);
             var target = DccMcpCommands.Execute("scene.create_isolated", new JObject());
             var targetScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
-            new GameObject("Saved target root");
+            var targetRoot = new GameObject("Saved target root");
             EditorSceneManager.MarkSceneDirty(targetScene);
             UnityEngine.SceneManagement.SceneManager.SetActiveScene(sibling);
             var path = Folder + "/CleanTarget.unity";
             var input = new JObject { ["scene_handle"] = target["scene_handle"], ["path"] = path };
             if (DccMcpDirtyAssets.SupportsDirtyQuery)
             {
-                RequireCleanFixture();
+#if UNITY_2019_3_OR_NEWER
+                SceneVisibilityManager.instance.Hide(siblingRoot, false);
+                SceneVisibilityManager.instance.DisablePicking(siblingRoot, false);
+                SceneVisibilityManager.instance.Hide(targetRoot, false);
+                SceneVisibilityManager.instance.DisablePicking(targetRoot, false);
+#endif
+                var fixtureSnapshot = RequireSafeFixture();
+                var packageFiles = ImmutableScriptFileHashes(fixtureSnapshot);
+                var visibilityBefore = FileHashOrMissing("Library/SceneVisibilityState.asset");
                 var result = DccMcpCommands.Execute("scene.save_exact", input);
+                Debug.Log("Exact-save editor-local visibility cache SHA256 before=" + visibilityBefore
+                    + " after=" + FileHashOrMissing("Library/SceneVisibilityState.asset"));
+                Debug.Log("Exact-save classification: " + result["asset_preflight_classification"].ToString());
+                foreach (var file in packageFiles)
+                    Assert.AreEqual(file.Value, FileHashOrMissing(file.Key), "Immutable package script/meta bytes must not change.");
+                Debug.Log("Exact-save immutable package source/meta files preserved: " + packageFiles.Count);
                 Assert.IsFalse((bool)result["dirty"]);
                 Assert.IsTrue(File.Exists(path));
+                Assert.AreEqual("Library/SceneVisibilityState.asset",
+                    (string)result["asset_preflight_classification"]["editor_local_state_may_write"]);
+#if UNITY_2019_3_OR_NEWER
+                Assert.IsTrue(SceneVisibilityManager.instance.IsHidden(siblingRoot));
+                Assert.IsTrue(SceneVisibilityManager.instance.IsPickingDisabled(siblingRoot));
+                Assert.IsTrue(SceneVisibilityManager.instance.IsHidden(targetRoot));
+                Assert.IsTrue(SceneVisibilityManager.instance.IsPickingDisabled(targetRoot));
+#endif
             }
             else
             {
@@ -162,6 +189,150 @@ namespace DccMcp.Unity.Tests
             CollectionAssert.AreEqual(siblingBytes, File.ReadAllBytes(sibling.path));
         }
 
+        private static string FileHashOrMissing(string path)
+        {
+            if (!File.Exists(path)) return "missing";
+            using (var hash = SHA256.Create())
+                return BitConverter.ToString(hash.ComputeHash(File.ReadAllBytes(path))).Replace("-", "").ToLowerInvariant();
+        }
+
+        private static Dictionary<string, string> ImmutableScriptFileHashes(JObject snapshot)
+        {
+            var hashes = new Dictionary<string, string>();
+#if UNITY_2019_3_OR_NEWER
+            foreach (var item in (JArray)snapshot["items"])
+            {
+                var path = (string)item["path"];
+                if (!path.StartsWith("Packages/", StringComparison.Ordinal)
+                    || (string)item["type"] != typeof(MonoScript).AssemblyQualifiedName) continue;
+                var package = UnityEditor.PackageManager.PackageInfo.FindForAssetPath(path);
+                if (package == null || !DccMcpAssetReuse.IsImmutablePackageSource(package.source)) continue;
+                Assert.IsTrue(path.StartsWith(package.assetPath + "/", StringComparison.Ordinal));
+                var physical = Path.Combine(package.resolvedPath, path.Substring(package.assetPath.Length + 1));
+                foreach (var file in new[] { physical, physical + ".meta" })
+                {
+                    var hash = FileHashOrMissing(file);
+                    Assert.AreNotEqual("missing", hash, "The immutable script fixture must have source/meta bytes.");
+                    hashes[file] = hash;
+                }
+            }
+#endif
+            return hashes;
+        }
+
+        [TestCase("hidden_material")]
+        [TestCase("subasset")]
+        [TestCase("prefab")]
+        public void DirtyUserContentCannotUseEngineExceptions(string kind)
+        {
+            UnityEngine.Object value;
+            string path;
+            if (kind == "prefab")
+            {
+                path = Folder + "/Module.prefab";
+                value = AssetDatabase.LoadAssetAtPath<GameObject>(path).transform;
+            }
+            else
+            {
+                path = Folder + "/Protected.asset";
+                var material = new Material(Shader.Find("Hidden/InternalErrorShader"));
+                AssetDatabase.CreateAsset(material, path);
+                value = material;
+                if (kind == "subasset")
+                {
+                    value = new Texture2D(1, 1) { name = "Protected child" };
+                    AssetDatabase.AddObjectToAsset(value, material);
+                }
+                AssetDatabase.SaveAssets(); // Baseline setup in this disposable fixture only.
+            }
+            var bytes = File.ReadAllBytes(path);
+            var scene = DccMcpCommands.Execute("scene.inspect", new JObject());
+            var scenePath = (string)scene["path"];
+            var sceneBytes = File.ReadAllBytes(scenePath);
+            if (kind == "prefab") ((Transform)value).localPosition = Vector3.one;
+            else if (kind == "subasset") ((Texture2D)value).anisoLevel = 7;
+            else
+            {
+                value.hideFlags = HideFlags.HideAndDontSave;
+                ((Material)value).renderQueue = 3123;
+            }
+            EditorUtility.SetDirty(value);
+            var refusal = Assert.Throws<InvalidOperationException>(() => DccMcpCommands.Execute("scene.save_exact",
+                new JObject { ["scene_handle"] = scene["scene_handle"], ["path"] = scenePath }));
+            StringAssert.Contains(DccMcpDirtyAssets.SupportsDirtyQuery ? path : "dirty_query_unsupported", refusal.Message);
+            if (kind == "prefab") Assert.AreEqual(Vector3.one, ((Transform)value).localPosition);
+            else if (kind == "subasset") Assert.AreEqual(7, ((Texture2D)value).anisoLevel);
+            else Assert.AreEqual(3123, ((Material)value).renderQueue);
+            if (DccMcpDirtyAssets.SupportsDirtyQuery)
+                Assert.IsTrue((bool)typeof(EditorUtility).GetMethod("IsDirty", new[] { typeof(UnityEngine.Object) })
+                    .Invoke(null, new object[] { value }));
+            CollectionAssert.AreEqual(bytes, File.ReadAllBytes(path));
+            CollectionAssert.AreEqual(sceneBytes, File.ReadAllBytes(scenePath));
+        }
+
+        [Test]
+        public void ExactSaveRejectsAlteredOrDuplicateEngineDescriptors()
+        {
+            var original = DccMcpDirtyAssets.Inspect(new JObject());
+            if (!DccMcpDirtyAssets.SupportsDirtyQuery)
+            {
+                Assert.Throws<InvalidOperationException>(() => DccMcpAssetReuse.RequireSafeLoadedAssets(original));
+                return;
+            }
+            Assert.Greater(((JArray)original["items"]).Count, 0, "Exercise real ambient engine objects.");
+            foreach (var change in new[] { "path", "type", "object_id", "field_errors", "duplicate" })
+            {
+                var snapshot = (JObject)original.DeepClone();
+                var items = (JArray)snapshot["items"];
+                var item = (JObject)items[0];
+                if (change == "path") item["path"] = "Library/not-a-builtin-resource";
+                if (change == "type") item["type"] = "UnityEditor.SceneVisibilityState, UntrustedAssembly";
+                if (change == "object_id") item["object_id"] = "not-an-object";
+                if (change == "field_errors") item["field_errors"] = new JObject { ["path"] = "unknown" };
+                if (change == "duplicate")
+                {
+                    items.Add(item.DeepClone());
+                    snapshot["dirty_persistent_count"] = items.Count;
+                    snapshot["items_count"] = items.Count;
+                }
+                Assert.Throws<InvalidOperationException>(() => DccMcpAssetReuse.RequireSafeLoadedAssets(snapshot), change);
+            }
+        }
+
+        [Test]
+        public void ExactSavePreflightDoesNotReloadAnUnloadedCapturedAsset()
+        {
+            if (!DccMcpDirtyAssets.SupportsDirtyQuery)
+            {
+                Assert.Throws<InvalidOperationException>(() => DccMcpAssetReuse.RequireSafeLoadedAssets(
+                    DccMcpDirtyAssets.Inspect(new JObject())));
+                return;
+            }
+            var material = new Material(Shader.Find("Hidden/InternalErrorShader"));
+            AssetDatabase.CreateAsset(material, Folder + "/Unloaded.mat");
+            AssetDatabase.SaveAssets();
+            EditorUtility.SetDirty(material);
+            var id = DccMcpObjectIdentity.GetId(material);
+            var snapshot = DccMcpDirtyAssets.Inspect(new JObject());
+            // Intentionally unload only this disposable probe to test stale capture.
+            Resources.UnloadAsset(material);
+            Assert.That(() => DccMcpAssetReuse.RequireSafeLoadedAssets(snapshot),
+                Throws.TypeOf<InvalidOperationException>().With.Message.Contains("changed dirty-object descriptor"));
+            foreach (var loaded in Resources.FindObjectsOfTypeAll<UnityEngine.Object>())
+                if (loaded != null) Assert.AreNotEqual(id, DccMcpObjectIdentity.GetId(loaded), "Preflight must not reload the probe.");
+        }
+
+#if UNITY_2019_3_OR_NEWER
+        [Test]
+        public void WritableAndUnknownPackageSourcesNeverUseTheImmutableException()
+        {
+            Assert.IsFalse(DccMcpAssetReuse.IsImmutablePackageSource(UnityEditor.PackageManager.PackageSource.Local));
+            Assert.IsFalse(DccMcpAssetReuse.IsImmutablePackageSource(UnityEditor.PackageManager.PackageSource.Embedded));
+            Assert.IsFalse(DccMcpAssetReuse.IsImmutablePackageSource(UnityEditor.PackageManager.PackageSource.Unknown));
+            Assert.IsTrue(DccMcpAssetReuse.IsImmutablePackageSource(UnityEditor.PackageManager.PackageSource.Registry));
+        }
+#endif
+
         private static JObject CleanSnapshot()
         {
             return new JObject { ["schema_version"] = 1, ["complete"] = true, ["incomplete"] = false,
@@ -169,11 +340,12 @@ namespace DccMcp.Unity.Tests
                 ["items"] = new JArray(), ["error_code"] = JValue.CreateNull(), ["error_message"] = JValue.CreateNull() };
         }
 
-        private static void RequireCleanFixture()
+        private static JObject RequireSafeFixture()
         {
             var snapshot = DccMcpDirtyAssets.Inspect(new JObject());
-            Assert.DoesNotThrow(() => DccMcpAssetReuse.RequireCleanLoadedAssets(snapshot),
-                "Disposable fixture did not establish clean loaded assets: " + snapshot.ToString());
+            Assert.DoesNotThrow(() => DccMcpAssetReuse.RequireSafeLoadedAssets(snapshot),
+                "Disposable fixture contains an unclassified or user-owned dirty asset: " + snapshot.ToString());
+            return snapshot;
         }
 
         private void TryNestedSave(UnityEngine.SceneManagement.Scene scene, string path)
@@ -194,7 +366,7 @@ namespace DccMcp.Unity.Tests
                 Assert.IsFalse(DccMcpAssetReuse.IsSavingScene);
                 return;
             }
-            RequireCleanFixture();
+            RequireSafeFixture();
             nestedSaveError = null;
             EditorSceneManager.sceneSaving += TryNestedSave;
             try { DccMcpCommands.Execute("scene.save_exact", input); }
@@ -222,8 +394,8 @@ namespace DccMcp.Unity.Tests
             if (change == "unknown_count") snapshot["dirty_persistent_count"] = JValue.CreateNull();
             if (change == "dirty") snapshot["dirty_persistent_count"] = 1;
             if (change == "missing_items") snapshot.Remove("items");
-            Assert.Throws<InvalidOperationException>(() => DccMcpAssetReuse.RequireCleanLoadedAssets(snapshot));
-            Assert.DoesNotThrow(() => DccMcpAssetReuse.RequireCleanLoadedAssets(CleanSnapshot()));
+            Assert.Throws<InvalidOperationException>(() => DccMcpAssetReuse.RequireSafeLoadedAssets(snapshot));
+            Assert.DoesNotThrow(() => DccMcpAssetReuse.RequireSafeLoadedAssets(CleanSnapshot()));
         }
 
         [Test]

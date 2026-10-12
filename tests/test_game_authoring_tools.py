@@ -246,7 +246,7 @@ def test_exact_scene_save_reuses_complete_dirty_snapshot_before_native_save():
     reuse = (editor / "DccMcpAssetReuse.cs").read_text("utf-8")
     commands = (editor / "DccMcpCommands.cs").read_text("utf-8")
     snapshot = reuse.index("DccMcpDirtyAssets.Inspect(new JObject())")
-    guard = reuse.index("RequireCleanLoadedAssets(snapshot)", snapshot)
+    guard = reuse.index("RequireSafeLoadedAssets(snapshot)", snapshot)
     native = reuse.index("EditorSceneManager.SaveScene(scene, path)", guard)
     assert snapshot < guard < native
     assert "IsSavingScene = false;" in reuse
@@ -254,6 +254,8 @@ def test_exact_scene_save_reuses_complete_dirty_snapshot_before_native_save():
     assert "scene.save_exact" in commands and "editor.inspect_dirty_assets" in commands
     assert "SaveAssets(" not in reuse
     assert "EditorUtility.SetDirty" not in reuse
+    assert "DccMcpObjectIdentity.Resolve(" not in reuse
+    assert "Resources.FindObjectsOfTypeAll<UnityEngine.Object>()" in reuse
 
 
 def test_project_asset_schemas_reject_traversal_and_backslashes():

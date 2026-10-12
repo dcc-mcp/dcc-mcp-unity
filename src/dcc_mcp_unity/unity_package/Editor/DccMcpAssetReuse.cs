@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
@@ -134,11 +135,12 @@ namespace DccMcp.Unity
                 // Capture immediately in this main-thread call; never trust an
                 // earlier client snapshot or save/restore those assets afterward.
                 var snapshot = DccMcpDirtyAssets.Inspect(new JObject());
-                RequireCleanLoadedAssets(snapshot);
+                var classification = RequireSafeLoadedAssets(snapshot);
                 if (!EditorSceneManager.SaveScene(scene, path)) throw new InvalidOperationException("Scene save failed.");
                 var result = SceneInfo(scene);
                 result["asset_preflight_capture_id"] = snapshot["capture_id"];
                 result["asset_preflight_scope"] = "loaded_persistent_objects";
+                result["asset_preflight_classification"] = classification;
                 return result;
             }
             finally
@@ -147,24 +149,112 @@ namespace DccMcp.Unity
             }
         }
 
-        internal static void RequireCleanLoadedAssets(JObject snapshot)
+        internal static JObject RequireSafeLoadedAssets(JObject snapshot)
         {
             if (snapshot == null
                 || !JToken.DeepEquals(snapshot["schema_version"], new JValue(1))
                 || !JToken.DeepEquals(snapshot["complete"], new JValue(true))
                 || !JToken.DeepEquals(snapshot["incomplete"], new JValue(false))
-                || !JToken.DeepEquals(snapshot["identity_complete"], new JValue(true))
+                || snapshot["identity_complete"] == null || snapshot["identity_complete"].Type != JTokenType.Boolean
                 || snapshot["error_code"] == null || snapshot["error_code"].Type != JTokenType.Null
                 || snapshot["error_message"] == null || snapshot["error_message"].Type != JTokenType.Null)
                 throw new InvalidOperationException("Exact scene save cannot establish loaded persistent asset state: "
                     + (snapshot == null ? "snapshot_unavailable" : (string)snapshot["error_code"] ?? "snapshot_incomplete") + ".");
             var items = snapshot["items"] as JArray;
-            if (!JToken.DeepEquals(snapshot["dirty_persistent_count"], new JValue(0))
-                || !JToken.DeepEquals(snapshot["items_count"], new JValue(0))
-                || items == null || items.Count != 0)
-                throw new InvalidOperationException("Exact scene save refuses existing loaded persistent dirty assets. "
-                    + "Inspect them and explicitly resolve their changes before saving the scene.");
+            if (items == null
+                || !JToken.DeepEquals(snapshot["dirty_persistent_count"], new JValue(items.Count))
+                || !JToken.DeepEquals(snapshot["items_count"], new JValue(items.Count)))
+                throw new InvalidOperationException("Exact scene save requires consistent complete dirty-asset counts.");
+
+            var builtin = 0;
+            var packageScripts = 0;
+            var editorState = 0;
+            var identityComplete = true;
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var loaded = new Dictionary<string, UnityEngine.Object>(StringComparer.Ordinal);
+            foreach (var value in Resources.FindObjectsOfTypeAll<UnityEngine.Object>())
+                if (value != null) loaded.Add(DccMcpObjectIdentity.GetId(value), value);
+            foreach (var token in items)
+            {
+                var item = token as JObject;
+                var errors = item == null ? null : item["field_errors"] as JObject;
+                if (item == null || errors == null || errors.Count != 0
+                    || item["path"] == null || item["path"].Type != JTokenType.String
+                    || item["type"] == null || item["type"].Type != JTokenType.String
+                    || item["object_id"] == null || item["object_id"].Type != JTokenType.String
+                    || item["identity_complete"] == null || item["identity_complete"].Type != JTokenType.Boolean
+                    || !JToken.DeepEquals(item["is_persistent"], new JValue(true))
+                    || !JToken.DeepEquals(item["is_dirty"], new JValue(true)))
+                    throw new InvalidOperationException("Exact scene save refuses an unclassified dirty object.");
+                string normalized;
+                if (!DccMcpObjectIdentity.TryNormalize((string)item["object_id"], out normalized))
+                    throw new InvalidOperationException("Exact scene save refuses an unknown dirty object identity.");
+                if (!seen.Add(normalized))
+                    throw new InvalidOperationException("Exact scene save refuses duplicate dirty-object identities.");
+                var knownIdentity = (bool)item["identity_complete"];
+                identityComplete &= knownIdentity;
+                var path = (string)item["path"];
+                var type = (string)item["type"];
+                // InstanceIDToObject can load an unloaded asset. Resolve exclusively
+                // against the loaded set instead, so stale IDs fail without loading.
+                UnityEngine.Object value;
+                if (!loaded.TryGetValue(normalized, out value) || value == null
+                    || DccMcpObjectIdentity.GetId(value) != normalized
+                    || value.GetType().AssemblyQualifiedName != type
+                    || AssetDatabase.GetAssetPath(value) != path || !EditorUtility.IsPersistent(value))
+                    throw new InvalidOperationException("Exact scene save refuses a changed dirty-object descriptor.");
+
+                // These three exact locations are Unity's built-in resource stores,
+                // not a general exemption for Library, hidden objects, or empty paths.
+                var builtinPath = path == "Library/unity default resources"
+                    || path == "Library/unity editor resources" || path == "Resources/unity_builtin_extra";
+                if (knownIdentity && builtinPath && (type == typeof(MonoScript).AssemblyQualifiedName
+                    || type == typeof(Shader).AssemblyQualifiedName || type == typeof(Texture2D).AssemblyQualifiedName))
+                {
+                    builtin++;
+                    continue;
+                }
+#if UNITY_2019_3_OR_NEWER
+                // Unity persists this exact engine-owned type to Library/SceneVisibilityState.asset.
+                // Scene save callbacks may update that local editor state; this is
+                // an explicit contract boundary, not a claim that it cannot be written.
+                if (path == "" && value.GetType().FullName == "UnityEditor.SceneVisibilityState"
+                    && value.GetType().Assembly == typeof(SceneVisibilityManager).Assembly)
+                {
+                    editorState++;
+                    continue;
+                }
+                if (knownIdentity && path.StartsWith("Packages/", StringComparison.Ordinal)
+                    && type == typeof(MonoScript).AssemblyQualifiedName)
+                {
+                    var package = UnityEditor.PackageManager.PackageInfo.FindForAssetPath(path);
+                    if (package != null && IsImmutablePackageSource(package.source)
+                        && !AssetDatabase.IsOpenForEdit(path))
+                    {
+                        packageScripts++;
+                        continue;
+                    }
+                }
+#endif
+                throw new InvalidOperationException("Exact scene save refuses a dirty user asset or unknown persistence scope: " + path + ". "
+                    + "Inspect dirty assets and explicitly resolve their changes before saving the scene.");
+            }
+            if ((bool)snapshot["identity_complete"] != identityComplete)
+                throw new InvalidOperationException("Exact scene save refuses inconsistent dirty-object identity coverage.");
+            return new JObject { ["dirty_objects_checked"] = items.Count, ["builtin_resources"] = builtin,
+                ["immutable_package_scripts"] = packageScripts, ["editor_local_visibility_state"] = editorState,
+                ["editor_local_state_may_write"] = "Library/SceneVisibilityState.asset" };
         }
+
+#if UNITY_2019_3_OR_NEWER
+        internal static bool IsImmutablePackageSource(UnityEditor.PackageManager.PackageSource source)
+        {
+            return source == UnityEditor.PackageManager.PackageSource.Registry
+                || source == UnityEditor.PackageManager.PackageSource.BuiltIn
+                || source == UnityEditor.PackageManager.PackageSource.Git
+                || source == UnityEditor.PackageManager.PackageSource.LocalTarball;
+        }
+#endif
 
         internal static JObject ReopenScene(JObject p)
         {
