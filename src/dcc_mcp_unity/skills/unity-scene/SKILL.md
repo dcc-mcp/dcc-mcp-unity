@@ -12,7 +12,7 @@ metadata:
     dcc: unity
     layer: domain
     version: "0.14.0"  # x-release-please-version
-    search-hint: "Unity scene hierarchy GameObject transform save Undo"
+    search-hint: "Unity scene hierarchy GameObject transform save Undo prefab assets dependencies"
     tags: "unity,scene,gameobject,transform,game-development"
     tools: tools.yaml
     depends: "dcc-diagnostics"
@@ -45,3 +45,58 @@ transaction for failures. Project component lifecycle callbacks can have their o
 external side effects; Undo cannot roll those back. Results include normalized
 readback and scene/prefab override state. No operation saves content. Review dirty
 scenes before the existing `save_scene`, which saves all open scenes.
+
+## Reuse local assets
+
+Use `find_assets` within Assets or installed Packages, then `inspect_asset` for
+identity and recursive dependency paths. Results are bounded and indicate truncation.
+Project and UPM assets are distinguished; their presence does not prove licensing.
+These tools do not search or purchase Asset Store products, install packages, import
+archives, execute downloaded code, or generate visual previews.
+
+Save any untitled scene to an explicit path first; Unity cannot add scenes beside it.
+For a separate layout, call `create_isolated_scene`, then `instantiate_prefab` with
+its scene handle and the asset's current dependency hash. Use returned object IDs
+with `set_transform` to arrange instances. Save only that scene with `save_exact_scene`
+to an existing Assets folder. `reopen_exact_scene` refuses dirty scenes and reads the
+saved scene from disk; use its new handle and fresh hierarchy IDs afterward.
+Keep another scene loaded during reopen. Never automatically retry mutations.
+
+Scene handles are opaque decimal strings, scoped to the current Editor session.
+Pass them through unchanged, including on Unity 6.5 where they can exceed safe JSON
+integer precision. Legacy 32-bit integer input remains accepted. Reinspect after
+reopening; a handle must never be replaced with the active scene when it is stale.
+
+Exact scene saving requires the complete dirty-asset snapshot implementation. Unity's
+native scene-save pipeline can also flush unrelated dirty persistent assets, so
+`save_exact_scene` takes a fresh snapshot synchronously and classifies every record.
+Dirty user assets, unknown identities/scopes, changed descriptors, field errors,
+unsupported capture, or incomplete/count-inconsistent state refuse before saving.
+It never saves assets to make the check pass, restores files, or re-marks objects dirty.
+
+The snapshot also contains ordinary Unity-internal dirtiness. The bounded exceptions
+are verified MonoScript/Shader/Texture2D objects at Unity's three exact built-in resource
+paths; identity-complete MonoScript objects from a confirmed immutable package source
+that Unity reports noneditable; and the exact native UnityEditor.SceneVisibilityState
+type. Local/Embedded/unknown packages and dirty package Materials or other user assets
+remain protected. Object ID, actual runtime type/assembly, and asset path are rechecked
+without loading assets. A package prefix or hide flag alone never permits saving.
+
+SceneVisibilityState is an explicit editor-local-state boundary: Unity's save callbacks
+may update `Library/SceneVisibilityState.asset`. It is not classified as unwritable.
+The result reports the actual exception counts and that possible editor-state write.
+Unrelated scene visibility/picking state and project asset bytes are native regression
+targets; zero writes to Unity's internal cache are not promised. The raw snapshot may
+be nonzero and is never relabeled clean.
+Unity 2018.4 has no supported public dirty query and therefore refuses exact saves;
+do not fall back to `save_scene` automatically. Other scene operations remain available.
+
+The preflight covers currently loaded persistent objects only. It is not a guarantee
+against external writers or project callbacks that create or save new dirty state
+during native saving. Nested DCC commands are rejected during the exact-save call.
+Use a clean, disposable project with reviewed local content for isolated acceptance.
+
+Boundary references: [Unity scene visibility](https://docs.unity3d.com/2021.3/Documentation/Manual/SceneVisibility.html),
+[package mutability](https://docs.unity3d.com/2021.3/Documentation/Manual/upm-concepts.html#Management),
+and Unity's [version-pinned built-in path classification](https://github.com/Unity-Technologies/UnityCsReference/blob/b052b1fe38b45d5aefa609a115c626ed2e74f3a6/Modules/QuickSearch/Editor/Utilities/Utils.cs#L1279-L1290).
+The implementation is independently authored; these references establish semantics.

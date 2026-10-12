@@ -57,6 +57,10 @@ def _toolchain_environment(args: argparse.Namespace) -> tuple[dict[str, str] | N
     if report.get("schema") != "msvc-kit.doctor.v1" or report.get("status") != "passed":
         raise ValueError("Requested msvc-kit must report a passing msvc-kit.doctor.v1 contract")
     toolchain = report.get("toolchain", {})
+    # Doctor serializes QueryResult.arch and host_arch as strings. Both must
+    # match the explicit x64 selection sent above, independently of version pins.
+    if toolchain.get("arch") != "x64" or toolchain.get("host_arch") != "x64":
+        raise ValueError("msvc-kit selected a different or missing x64 host/target architecture")
     if toolchain.get("msvc", {}).get("version") != args.msvc_version:
         raise ValueError("msvc-kit selected a different MSVC version from the requested pin")
     if toolchain.get("sdk", {}).get("version") != args.sdk_version:
@@ -70,6 +74,14 @@ def _toolchain_environment(args: argparse.Namespace) -> tuple[dict[str, str] | N
         )
     ):
         raise ValueError("msvc-kit doctor did not supply a valid toolchain environment")
+    # msvc-kit get_env_vars exports all three search lists. Missing/empty lists
+    # must not inherit ambient compiler, header or library selection instead.
+    normalized = {key.casefold(): value for key, value in variables.items()}
+    if len(normalized) != len(variables):
+        raise ValueError("msvc-kit doctor supplied duplicate case-insensitive environment keys")
+    for key in ("path", "include", "lib"):
+        if not any(part.strip() for part in normalized.get(key, "").split(";")):
+            raise ValueError(f"msvc-kit doctor must supply a non-empty {key.upper()} search list")
     environment = os.environ.copy()
     # Windows environment keys are case insensitive; preserve the provided PATH once.
     for key, value in variables.items():

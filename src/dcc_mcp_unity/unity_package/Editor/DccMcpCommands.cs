@@ -1,5 +1,6 @@
 using System;
 using System.Globalization;
+using System.Threading;
 using Newtonsoft.Json.Linq;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -8,14 +9,29 @@ using UnityEngine.SceneManagement;
 
 namespace DccMcp.Unity
 {
-    internal static class DccMcpCommands
+    public static class DccMcpCommands
     {
+        private static int editorThreadId;
         private const int DefaultSceneNodes = 1000;
         private const int MaxSceneNodes = 5000;
         private const int MaxSnapshotTextCharacters = 512;
 
-        internal static JObject Execute(string method, JObject parameters)
+        // Only Unity's domain-load callback establishes thread ownership. A first
+        // call from a worker must not initialize itself as the Editor thread.
+        [InitializeOnLoadMethod]
+        private static void InitializeEditorThread()
         {
+            if (DccMcpBridge.IsImportWorkerOrBatchMode()) return;
+            Volatile.Write(ref editorThreadId, Thread.CurrentThread.ManagedThreadId);
+        }
+
+        public static JObject Execute(string method, JObject parameters)
+        {
+            var ownerThreadId = Volatile.Read(ref editorThreadId);
+            if (ownerThreadId == 0 || Thread.CurrentThread.ManagedThreadId != ownerThreadId)
+                throw new InvalidOperationException("Unity commands require the initialized Editor main thread.");
+            if (DccMcpAssetReuse.IsSavingScene)
+                throw new InvalidOperationException("Unity command reentrancy is disabled during an exact scene save.");
             EnsureEditorReady(method);
             var undoable = IsUndoable(method);
             var undoGroup = -1;
@@ -39,6 +55,12 @@ namespace DccMcp.Unity
                     case "project.inspect":
                         result = InspectProject();
                         break;
+                    case "assets.find": result = DccMcpAssetReuse.Find(parameters); break;
+                    case "assets.inspect": result = DccMcpAssetReuse.Inspect(parameters); break;
+                    case "scene.instantiate_prefab": result = DccMcpAssetReuse.Instantiate(parameters); break;
+                    case "scene.create_isolated": result = DccMcpAssetReuse.CreateScene(); break;
+                    case "scene.save_exact": result = DccMcpAssetReuse.SaveScene(parameters); break;
+                    case "scene.reopen_exact": result = DccMcpAssetReuse.ReopenScene(parameters); break;
                     case "assets.refresh":
                         result = RefreshAssets();
                         break;
@@ -89,6 +111,9 @@ namespace DccMcp.Unity
                     case "editor.read_console":
                         result = DccMcpConsole.Read(parameters);
                         break;
+                    case "editor.inspect_dirty_assets":
+                        result = DccMcpDirtyAssets.Inspect(parameters);
+                        break;
                     case "tuanjie_ai.inspect":
                         result = DccMcpTuanjieAi.Inspect();
                         break;
@@ -119,13 +144,15 @@ namespace DccMcp.Unity
 
         private static bool IsUndoable(string method)
         {
-            return method == "scene.create_game_object" || method == "scene.set_transform" || method == "scene.delete_game_object"
+            return method == "scene.instantiate_prefab" || method == "scene.create_game_object"
+                || method == "scene.set_transform" || method == "scene.delete_game_object"
                 || method == "components.add" || method == "components.remove" || method == "components.set";
         }
 
         private static void EnsureEditorReady(string method)
         {
-            var mutating = IsUndoable(method) || method == "assets.refresh"
+            var mutating = method == "scene.create_isolated" || method == "scene.save_exact"
+                || method == "scene.reopen_exact" || IsUndoable(method) || method == "assets.refresh"
                 || method == "assets.configure_sprite"
                 || method == "scene.create_game_object"
                 || method == "scene.delete_game_object"
@@ -295,6 +322,7 @@ namespace DccMcp.Unity
             return new JObject
             {
                 ["scene_name"] = scene.name,
+                ["scene_handle"] = DccMcpSceneIdentity.GetId(scene),
                 ["scene_path"] = scene.path,
                 ["dirty"] = scene.isDirty,
                 ["roots"] = roots,

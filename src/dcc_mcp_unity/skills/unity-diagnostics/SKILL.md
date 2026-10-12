@@ -21,6 +21,18 @@ metadata:
 
 # Unity Diagnostics
 
+`inspect_dirty_assets` reads the already loaded persistent dirty set once on the Editor
+main thread. It returns every object or fails without an object prefix at the 768-KiB
+result budget. It never loads assets, refreshes, saves, discards, or changes selection.
+`complete` covers snapshot membership, not ownership or saveability. Read exact names,
+paths, hide flags, main/subasset flags, GUID/64-bit local IDs and GlobalObjectIds;
+unknown/default identifiers and field errors remain explicit. Local IDs are decimal
+strings so browser clients preserve all 64 bits. Owner/session and assembly MVID belong
+to the same capture; map the MVID to separately verified source/build receipts.
+Editors without the public `EditorUtility.IsDirty(Object)` API (including Unity
+2018.4) return `dirty_query_unsupported` with a null dirty count, not zero or clean.
+A new capture describes its current set, not a historical count.
+
 Call `ping` when install verification or recovery needs fresh proof that the Editor update loop can
 execute work. A connected WebSocket alone is not sufficient readiness evidence.
 
