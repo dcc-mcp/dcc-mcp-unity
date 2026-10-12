@@ -262,7 +262,18 @@ namespace DccMcp.Unity
             var path = scene.path;
             if (scene.isDirty || string.IsNullOrEmpty(path) || !File.Exists(path))
                 throw new InvalidOperationException("Reopen requires a clean saved scene.");
-            if (SceneManager.sceneCount < 2) throw new InvalidOperationException("Keep another scene loaded before reopening.");
+            var targetId = DccMcpSceneIdentity.GetId(scene);
+            var hasLoadedSibling = false;
+            for (var index = 0; index < SceneManager.sceneCount; index++)
+            {
+                var sibling = SceneManager.GetSceneAt(index);
+                if (sibling.IsValid() && sibling.isLoaded && DccMcpSceneIdentity.GetId(sibling) != targetId)
+                {
+                    hasLoadedSibling = true;
+                    break;
+                }
+            }
+            if (!hasLoadedSibling) throw new InvalidOperationException("Keep another scene loaded before reopening.");
             if (!EditorSceneManager.CloseScene(scene, true)) throw new InvalidOperationException("Scene close failed.");
             var reopened = EditorSceneManager.OpenScene(path, OpenSceneMode.Additive);
             SceneManager.SetActiveScene(reopened);

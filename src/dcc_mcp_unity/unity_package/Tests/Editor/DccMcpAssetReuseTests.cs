@@ -80,6 +80,42 @@ namespace DccMcp.Unity.Tests
         }
 
         [Test]
+        public void ReopenRefusesAnUnloadedSiblingWithoutClosingTheTarget()
+        {
+            var target = UnityEngine.SceneManagement.SceneManager.GetActiveScene();
+            var targetId = DccMcpSceneIdentity.GetId(target);
+            var targetPath = target.path;
+            var targetBytes = File.ReadAllBytes(targetPath);
+            var siblingPath = Folder + "/UnloadedSibling.unity";
+            var sibling = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Additive);
+            Assert.IsTrue(EditorSceneManager.SaveScene(sibling, siblingPath));
+            var siblingBytes = File.ReadAllBytes(siblingPath);
+            Assert.IsTrue(UnityEngine.SceneManagement.SceneManager.SetActiveScene(target));
+            Assert.IsTrue(EditorSceneManager.CloseScene(sibling, false));
+            var unloaded = UnityEngine.SceneManagement.SceneManager.GetSceneByPath(siblingPath);
+            Assert.IsTrue(unloaded.IsValid());
+            Assert.IsFalse(unloaded.isLoaded);
+            Assert.AreEqual(2, UnityEngine.SceneManagement.SceneManager.sceneCount);
+            Assert.IsTrue(target.isLoaded);
+            Assert.IsFalse(target.isDirty);
+
+            Assert.That(() => DccMcpCommands.Execute("scene.reopen_exact",
+                new JObject { ["scene_handle"] = targetId }),
+                Throws.TypeOf<InvalidOperationException>().With.Message.Contains("Keep another scene loaded"));
+
+            var retained = UnityEngine.SceneManagement.SceneManager.GetSceneByPath(targetPath);
+            Assert.IsTrue(retained.IsValid());
+            Assert.AreEqual(targetId, DccMcpSceneIdentity.GetId(retained));
+            Assert.IsTrue(retained.isLoaded);
+            Assert.IsFalse(retained.isDirty);
+            Assert.AreEqual(target, UnityEngine.SceneManagement.SceneManager.GetActiveScene());
+            Assert.AreEqual(2, UnityEngine.SceneManagement.SceneManager.sceneCount);
+            Assert.IsFalse(UnityEngine.SceneManagement.SceneManager.GetSceneByPath(siblingPath).isLoaded);
+            CollectionAssert.AreEqual(targetBytes, File.ReadAllBytes(targetPath));
+            CollectionAssert.AreEqual(siblingBytes, File.ReadAllBytes(siblingPath));
+        }
+
+        [Test]
         public void RejectChangedDependenciesAndUnsafeSaveWithoutMutation()
         {
             var scene = DccMcpCommands.Execute("scene.create_isolated", new JObject());
