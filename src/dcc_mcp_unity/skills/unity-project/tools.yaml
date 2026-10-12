@@ -29,6 +29,25 @@ tools:
     next-tools:
       on-success: [unity_project__inspect_project]
       on-failure: [dcc_diagnostics__screenshot, dcc_diagnostics__audit_log]
+  - name: search_assets
+    description: Search imported Unity assets by AssetDatabase query and return bounded GUID, path, and main asset type results.
+    input_schema:
+      type: object
+      required: [query]
+      properties:
+        query: {type: string, minLength: 1, maxLength: 256}
+        max_results: {type: integer, minimum: 1, maximum: 500, default: 100}
+      additionalProperties: false
+    output_schema: {type: object}
+    read_only: true
+    destructive: false
+    idempotent: true
+    execution: sync
+    affinity: main
+    enforce_thread_affinity: true
+    timeout_hint_secs: 60
+    source_file: scripts/search_assets.py
+    next-tools: [unity_project__read_text_asset, unity_scene__inspect_scene]
   - name: configure_sprite_importer
     description: Import one existing PNG below Assets and configure it as a single Unity Sprite with mipmaps disabled, alpha transparency enabled, and clamp wrapping. Use after external sprite generation; this does not edit image pixels or accept paths outside the project.
     input_schema:
