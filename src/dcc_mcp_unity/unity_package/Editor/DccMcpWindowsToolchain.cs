@@ -30,9 +30,9 @@ namespace DccMcp.Unity
             return value;
         }
 
-        // The pinned release is small; neither this gate nor doctor installs a compiler/SDK.
-        // JSON parsing is owned by the Editor's existing Newtonsoft dependency.
-        internal static string ReadMsvcKitDoctor()
+        // Cheap checks run before a target switch as well as immediately before build.
+        // They do not launch doctor or modify the Editor environment.
+        internal static void ValidateMsvcKitConfiguration()
         {
             var executable = RequiredSelection("MSVC_KIT");
             var root = RequiredSelection("MSVC_KIT_DIR");
@@ -43,11 +43,39 @@ namespace DccMcp.Unity
             {
                 throw new InvalidOperationException("msvc-kit requires full MSVC and Windows SDK version pins.");
             }
+            if (!Directory.Exists(root))
+            {
+                throw new InvalidOperationException(
+                    "The configured msvc-kit toolchain root is missing; prepare it before starting the build.");
+            }
             if (!File.Exists(executable) || HashFile(executable) != MsvcKitSha256)
             {
                 throw new InvalidOperationException(
                     "msvc-kit is missing or its SHA256 does not match the official v0.2.21 Windows release.");
             }
+        }
+
+        internal static string CheckMsvcKitBuildPhase(string phase, Action validateConfiguration, Func<string> readDoctor)
+        {
+            if (phase != "starting" && phase != "switching_build_target" && phase != "ready_to_build")
+            {
+                throw new InvalidOperationException("Unknown Windows build preflight phase: " + phase);
+            }
+            validateConfiguration();
+            // Only the final preflight needs the expensive native compile probe.
+            // Return that report directly so the successful build retains its evidence.
+            return phase == "ready_to_build" ? readDoctor() : null;
+        }
+
+        // The pinned release is small; neither this gate nor doctor installs a compiler/SDK.
+        // JSON parsing is owned by the Editor's existing Newtonsoft dependency.
+        internal static string ReadMsvcKitDoctor()
+        {
+            ValidateMsvcKitConfiguration();
+            var executable = RequiredSelection("MSVC_KIT");
+            var root = RequiredSelection("MSVC_KIT_DIR");
+            var msvc = RequiredSelection("MSVC_VERSION");
+            var sdk = RequiredSelection("SDK_VERSION");
             var start = new ProcessStartInfo
             {
                 FileName = executable,

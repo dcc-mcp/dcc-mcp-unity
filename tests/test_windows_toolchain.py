@@ -138,6 +138,18 @@ def test_doctor_failure_preserves_machine_readable_diagnostics(monkeypatch):
         )
 
 
+def test_invalid_doctor_json_has_an_actionable_diagnostic(monkeypatch):
+    module = _builder()
+    monkeypatch.setattr(module.sys, "platform", "win32")
+    monkeypatch.setattr(module.subprocess, "check_output", lambda *_a, **_k: "not-json")
+    with pytest.raises(
+        ValueError, match="msvc-kit doctor returned invalid JSON; verify the pinned CLI"
+    ):
+        module._toolchain_environment(
+            _options(msvc_kit="msvc-kit", msvc_version="14.44.35207", sdk_version="10.0.22621.0")
+        )
+
+
 @pytest.mark.parametrize(
     "variable", ["CC", "CXX_x86_64_pc_windows_msvc", "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER"]
 )
@@ -470,6 +482,7 @@ def test_windows_il2cpp_preflight_contract_in_compiled_csharp(tmp_path):
     )
     assert "WINDOWS_TOOLCHAIN_FIXTURES_OK" in result.stdout
     assert "WINDOWS_TOOLCHAIN_CONTRACT_OK" in result.stdout
+    assert "WINDOWS_MSVC_KIT_PHASE_CONTRACT_OK" in result.stdout
     if os.environ.get("DCC_MCP_REQUIRE_WINDOWS_TOOLCHAIN") == "1":
         result = subprocess.run(
             [*runtime, str(executable), "--discover"],

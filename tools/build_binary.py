@@ -81,7 +81,10 @@ def _toolchain_environment(args: argparse.Namespace) -> tuple[dict[str, str] | N
         ) from error
     except subprocess.TimeoutExpired as error:
         raise ValueError("msvc-kit doctor exceeded its 180-second deadline") from error
-    report = json.loads(output)
+    try:
+        report = json.loads(output)
+    except json.JSONDecodeError as error:
+        raise ValueError("msvc-kit doctor returned invalid JSON; verify the pinned CLI") from error
     if not isinstance(report, dict):
         raise ValueError("msvc-kit doctor must return a JSON object")
     if report.get("schema") != "msvc-kit.doctor.v1" or report.get("status") != "passed":

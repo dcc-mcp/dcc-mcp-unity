@@ -50,6 +50,34 @@ internal static class WindowsToolchainProbe
         };
     }
 
+    private static void CheckBuildPhases()
+    {
+        var cheapCalls = 0;
+        var doctorCalls = 0;
+        const string finalReport = "fixture final doctor report";
+        Action cheap = () => { cheapCalls++; };
+        Func<string> doctor = () => { doctorCalls++; return finalReport; };
+        Require(DccMcpWindowsToolchain.CheckMsvcKitBuildPhase("starting", cheap, doctor) == null,
+            "Starting must validate configuration without running doctor");
+        Require(DccMcpWindowsToolchain.CheckMsvcKitBuildPhase("switching_build_target", cheap, doctor) == null,
+            "Post-reload checks must not repeat the native compile probe");
+        Require(cheapCalls == 2 && doctorCalls == 0, "Early phases must only run cheap checks");
+        var report = DccMcpWindowsToolchain.CheckMsvcKitBuildPhase("ready_to_build", cheap, doctor);
+        Require(cheapCalls == 3 && doctorCalls == 1, "Exactly one doctor call must precede the actual build");
+        Require(report == finalReport, "The final doctor report must be retained for the build result");
+        foreach (var phase in new[] { "starting", "switching_build_target", "ready_to_build" })
+        {
+            MustFail(() => DccMcpWindowsToolchain.CheckMsvcKitBuildPhase(
+                phase, () => { throw new InvalidOperationException("invalid mandatory configuration"); }, doctor),
+                "invalid mandatory configuration");
+        }
+        Require(doctorCalls == 1, "Invalid mandatory configuration must fail before doctor at every phase");
+        MustFail(() => DccMcpWindowsToolchain.CheckMsvcKitBuildPhase(
+            "ready_to_build", cheap, () => { throw new InvalidOperationException("doctor failed"); }), "doctor failed");
+        MustFail(() => DccMcpWindowsToolchain.CheckMsvcKitBuildPhase("unknown", cheap, doctor), "Unknown Windows build");
+        Console.WriteLine("WINDOWS_MSVC_KIT_PHASE_CONTRACT_OK");
+    }
+
     private static void CheckFixtures(string root)
     {
         var absentVswhere = Path.Combine(root, "absent-vswhere.exe");
@@ -178,6 +206,7 @@ internal static class WindowsToolchainProbe
         MustFail(() => DccMcpWindowsToolchain.Ensure(true, true, true, () => "SDK absent"), "SDK absent");
         DccMcpWindowsToolchain.Ensure(true, true, true, inspect);
         Require(probed, "IL2CPP must verify Unity compiler discovery");
+        CheckBuildPhases();
         Require(DccMcpWindowsToolchain.QuoteArgument(@"C:\中文 path\") == "\"C:\\中文 path\\\\\"",
             "Doctor arguments must preserve spaces, Unicode and a trailing directory separator");
         var root = Path.Combine(Path.GetTempPath(), "dcc-mcp-toolchain-" + Guid.NewGuid().ToString("N"));

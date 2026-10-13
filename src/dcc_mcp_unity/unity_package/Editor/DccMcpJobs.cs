@@ -578,7 +578,7 @@ namespace DccMcp.Unity
                 "Windows x64",
                 BuildTargetGroup.Standalone,
                 BuildTarget.StandaloneWindows64,
-                () => { toolchain = EnsureWindowsBuildToolchain(); });
+                () => { toolchain = EnsureWindowsBuildToolchain(phase); });
             if (scenes == null)
             {
                 return;
@@ -632,7 +632,7 @@ namespace DccMcp.Unity
             });
         }
 
-        private static JObject EnsureWindowsBuildToolchain()
+        private static JObject EnsureWindowsBuildToolchain(string phase)
         {
             var il2cpp = PlayerSettings.GetScriptingBackend(BuildTargetGroup.Standalone) == ScriptingImplementation.IL2CPP;
             DccMcpWindowsToolchain.Ensure(
@@ -641,8 +641,13 @@ namespace DccMcp.Unity
                 BuildPipeline.IsBuildTargetSupported(BuildTargetGroup.Standalone, BuildTarget.StandaloneWindows64),
                 () => DccMcpWindowsToolchain.InspectCompiler(EditorApplication.applicationContentsPath));
             if (!il2cpp) { return null; }
+            var json = DccMcpWindowsToolchain.CheckMsvcKitBuildPhase(
+                phase,
+                DccMcpWindowsToolchain.ValidateMsvcKitConfiguration,
+                DccMcpWindowsToolchain.ReadMsvcKitDoctor);
+            if (json == null) { return null; }
             JObject report;
-            try { report = JObject.Parse(DccMcpWindowsToolchain.ReadMsvcKitDoctor()); }
+            try { report = JObject.Parse(json); }
             catch (JsonReaderException exception)
             {
                 throw new InvalidOperationException("msvc-kit doctor returned invalid JSON; verify the pinned CLI.", exception);

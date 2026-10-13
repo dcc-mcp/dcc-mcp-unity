@@ -74,7 +74,11 @@ the persistent job checks before target switching and again before BuildPlayer:
 
 - Windows Editor host and matching Windows x64 IL2CPP player resources.
 - Existing registered VS C++ tools and Windows SDK availability.
-- The real, hash-pinned msvc-kit doctor compile contract described above.
+- Mandatory msvc-kit configuration, full version pins, root availability and CLI hash.
+
+Only the final `ready_to_build` phase, immediately before BuildPlayer, runs:
+
+- The real, hash-pinned msvc-kit doctor compile contract described above, once.
 - The selected full modern MSVC version, compiler/linker hashes, and selected
   SDK version/resource/manifest-tool hashes correspond to registered tools.
 
