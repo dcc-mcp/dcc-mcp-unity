@@ -26,7 +26,9 @@ def _builder(*, verify_cli=False):
 
 
 def _options(**overrides):
-    values = dict(msvc_kit="", msvc_kit_dir="", msvc_version="", sdk_version="")
+    values = dict(
+        msvc_kit="", msvc_kit_dir="", msvc_version="", sdk_version="", sdk_dir=None, host_arch="x64"
+    )
     values.update(overrides)
     if values["msvc_kit"] and "msvc_kit_dir" not in overrides:
         values["msvc_kit_dir"] = "C:/tools/compiler"
@@ -63,6 +65,139 @@ def _report():
     }
 
 
+def _legacy_report(host="x64"):
+    # Inert JSON contract fixture: no released binary or VS2015 compiler is executed.
+    report = _report()
+    report["toolchain"]["host_arch"] = host
+    report["toolchain"]["msvc"] = {"version": "14.0", "install_path": "C:/VS2015/VC"}
+    report["toolchain"]["sdk"] = {"version": "10.0.14393.0", "install_path": "C:/SDK"}
+    report["checks"] += [
+        {"id": "version.msvc", "status": "skipped"},
+        {"id": "version.sdk_tools", "status": "skipped"},
+    ]
+    if host == "x86":
+        report["checks"][4]["status"] = "skipped"
+    return report
+
+
+def _legacy_options(**overrides):
+    values = dict(
+        msvc_kit="msvc-kit",
+        msvc_kit_dir="C:/VS2015",
+        msvc_version="14.0",
+        sdk_version="10.0.14393.0",
+        sdk_dir="C:/SDK",
+        host_arch="x64",
+    )
+    values.update(overrides)
+    return _options(**values)
+
+
+@pytest.mark.parametrize("host", ["x64", "x86"])
+def test_legacy_family_sdk_root_and_host_contract_fixture(monkeypatch, host):
+    module = _builder()
+    monkeypatch.setattr(module.sys, "platform", "win32")
+    # JSON fixture only: this does not execute a native VS2015 compiler.
+    commands = []
+
+    def fixture(command, **_kwargs):
+        commands.append(command)
+        return json.dumps(_legacy_report(host))
+
+    monkeypatch.setattr(module.subprocess, "check_output", fixture)
+    _, report = module._toolchain_environment(_legacy_options(host_arch=host))
+    assert commands[0][commands[0].index("--host-arch") + 1] == host
+    assert commands[0][-2:] == ["--sdk-dir", "C:/SDK"]
+    assert report["compiler_version_kind"] == "family"
+    assert report["consumer_probe_execution_verified"] is (host == "x64")
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "wrong_host",
+        "wrong_target",
+        "wrong_sdk_root",
+        "wrong_vc_root",
+        "patch_claim",
+        "execute_skip",
+        "compile_skip",
+    ],
+)
+def test_legacy_fixture_rejects_unrelated_or_unverified_selection(monkeypatch, change):
+    module = _builder()
+    monkeypatch.setattr(module.sys, "platform", "win32")
+    report = _legacy_report()
+    if change == "wrong_host":
+        report["toolchain"]["host_arch"] = "x86"
+    elif change == "wrong_target":
+        report["toolchain"]["arch"] = "x86"
+    elif change == "wrong_sdk_root":
+        report["toolchain"]["sdk"]["install_path"] = "C:/unrelated"
+    elif change == "wrong_vc_root":
+        report["toolchain"]["msvc"]["install_path"] = "C:/copied/VC"
+    elif change == "patch_claim":
+        report["toolchain"]["msvc"]["version"] = "14.0.24215"
+    else:
+        report["checks"][4 if change == "execute_skip" else 0]["status"] = "skipped"
+    monkeypatch.setattr(module.subprocess, "check_output", lambda *_a, **_k: json.dumps(report))
+    with pytest.raises(ValueError):
+        module._toolchain_environment(_legacy_options())
+
+
+@pytest.mark.parametrize("stage", ["compile", "resource", "link", "manifest"])
+def test_cross_host_fixture_cannot_skip_native_build_stages(monkeypatch, stage):
+    module = _builder()
+    monkeypatch.setattr(module.sys, "platform", "win32")
+    report = _legacy_report("x86")
+    next(check for check in report["checks"] if check["id"] == f"probe.{stage}")["status"] = (
+        "skipped"
+    )
+    monkeypatch.setattr(module.subprocess, "check_output", lambda *_a, **_k: json.dumps(report))
+    with pytest.raises(ValueError, match=f"probe.{stage}"):
+        module._toolchain_environment(_legacy_options(host_arch="x86"))
+
+
+@pytest.mark.parametrize("pin", ["14.0.24215", "14.44", "14", "14.0.0"])
+def test_compiler_pins_do_not_invent_a_legacy_patch_version(monkeypatch, pin):
+    module = _builder()
+    monkeypatch.setattr(module.sys, "platform", "win32")
+    with pytest.raises(ValueError, match="full modern MSVC"):
+        module._toolchain_environment(_legacy_options(msvc_version=pin))
+
+
+@pytest.mark.parametrize("change", ["missing", "duplicate", "passed"])
+def test_legacy_family_version_must_remain_explicitly_unverified(monkeypatch, change):
+    module = _builder()
+    monkeypatch.setattr(module.sys, "platform", "win32")
+    report = _legacy_report()
+    if change == "missing":
+        report["checks"].pop(5)
+    elif change == "duplicate":
+        report["checks"].append(report["checks"][5].copy())
+    else:
+        report["checks"][5]["status"] = "passed"
+    monkeypatch.setattr(module.subprocess, "check_output", lambda *_a, **_k: json.dumps(report))
+    with pytest.raises(ValueError, match="unverified patch version"):
+        module._toolchain_environment(_legacy_options())
+
+
+def test_legacy_waits_for_an_approved_released_cli_identity(monkeypatch):
+    module = _builder()
+    monkeypatch.setattr(module.sys, "platform", "win32")
+    # Pin this guard's fixture explicitly so it remains meaningful after rollout.
+    monkeypatch.setattr(module, "MSVC_KIT_VERSION", "0.2.21")
+    with pytest.raises(ValueError, match="approved released msvc-kit 0.2.22"):
+        module._toolchain_environment(_legacy_options())
+
+
+def test_legacy_requires_explicit_sdk_root(monkeypatch):
+    module = _builder()
+    monkeypatch.setattr(module.sys, "platform", "win32")
+    with pytest.raises(ValueError, match="explicit --sdk-dir"):
+        module._toolchain_environment(_legacy_options(sdk_dir=None))
+
+
 def test_normal_sidecar_build_does_not_require_or_invoke_msvc(monkeypatch):
     module = _builder()
     monkeypatch.setattr(module.sys, "platform", "linux")
@@ -94,6 +229,26 @@ def test_windows_sidecar_requires_an_explicit_toolchain_root(monkeypatch):
                 sdk_version="10.0.22621.0",
             )
         )
+
+
+def test_pinned_release_identity_is_consistent_across_consumers():
+    module = _builder(verify_cli=True)
+    assert module.MSVC_KIT_VERSION == "0.2.22"
+    assert module.MSVC_KIT_SHA256 == (
+        "184f07fb2896f0a7d27c45445990bd7d9e525b6ee58956cfe857bf0027848925"
+    )
+    helper = (ROOT / "src/dcc_mcp_unity/unity_package/Editor/DccMcpWindowsToolchain.cs").read_text()
+    preparation = (ROOT / ".github/scripts/prepare-msvc-kit.ps1").read_text()
+    documentation = (ROOT / "docs/windows-toolchain.md").read_text()
+    assert f'MsvcKitVersion = "{module.MSVC_KIT_VERSION}"' in helper
+    assert f'MsvcKitSha256 = "{module.MSVC_KIT_SHA256}"' in helper
+    assert f"$expectedSha = '{module.MSVC_KIT_SHA256}'" in preparation
+    assert (
+        f"releases/download/v{module.MSVC_KIT_VERSION}/msvc-kit-x86_64-windows.exe" in preparation
+    )
+    assert f"cli_release = 'v{module.MSVC_KIT_VERSION}'" in preparation
+    assert module.MSVC_KIT_SHA256 in documentation
+    assert f"releases/tag/v{module.MSVC_KIT_VERSION}" in documentation
 
 
 def test_unrecognized_msvc_kit_binary_is_rejected_before_execution(tmp_path):
@@ -178,15 +333,20 @@ def _assert_real_report(report):
     assert report["schema"] == "msvc-kit.doctor.v1"
     assert report["status"] == "passed"
     selected = report["toolchain"]
-    assert selected["arch"] == selected["host_arch"] == "x64"
+    host = os.environ.get("DCC_MCP_UNITY_HOST_ARCH") or "x64"
+    assert selected["arch"] == "x64" and selected["host_arch"] == host
     assert selected["msvc"]["version"] == os.environ["DCC_MCP_UNITY_MSVC_VERSION"]
     assert selected["sdk"]["version"] == os.environ["DCC_MCP_UNITY_SDK_VERSION"]
     for stage in ("compile", "resource", "link", "manifest", "execute"):
         checks = [check for check in report["checks"] if check["id"] == f"probe.{stage}"]
-        assert len(checks) == 1 and checks[0]["status"] == "passed"
+        allowed = ("passed", "skipped") if stage == "execute" and host == "x86" else ("passed",)
+        assert len(checks) == 1 and checks[0]["status"] in allowed
     preparation = json.loads(
         Path(os.environ["DCC_MCP_UNITY_MSVC_KIT_PREPARATION"]).read_text(encoding="utf-8-sig")
     )
+    assert preparation["host_arch"] == host and preparation["target_arch"] == "x64"
+    assert preparation["selected_msvc_version"] == selected["msvc"]["version"]
+    assert preparation["selected_sdk_version"] == selected["sdk"]["version"]
     for name in ("cl", "link", "lib", "rc", "mt"):
         assert (
             hashlib.sha256(Path(selected["tools"][name]).read_bytes()).hexdigest()
@@ -203,6 +363,8 @@ def test_real_msvc_kit_standalone_consumer_compiles_without_toolchain_download(t
         msvc_kit_dir=os.environ["DCC_MCP_UNITY_MSVC_KIT_DIR"],
         msvc_version=os.environ["DCC_MCP_UNITY_MSVC_VERSION"],
         sdk_version=os.environ["DCC_MCP_UNITY_SDK_VERSION"],
+        sdk_dir=os.environ.get("DCC_MCP_UNITY_SDK_DIR") or None,
+        host_arch=os.environ.get("DCC_MCP_UNITY_HOST_ARCH") or "x64",
     )
     evidence = _evidence_directory()
     try:
@@ -483,6 +645,7 @@ def test_windows_il2cpp_preflight_contract_in_compiled_csharp(tmp_path):
     assert "WINDOWS_TOOLCHAIN_FIXTURES_OK" in result.stdout
     assert "WINDOWS_TOOLCHAIN_CONTRACT_OK" in result.stdout
     assert "WINDOWS_MSVC_KIT_PHASE_CONTRACT_OK" in result.stdout
+    assert "WINDOWS_LEGACY_SELECTION_FIXTURES_OK" in result.stdout
     if os.environ.get("DCC_MCP_REQUIRE_WINDOWS_TOOLCHAIN") == "1":
         result = subprocess.run(
             [*runtime, str(executable), "--discover"],
@@ -514,6 +677,7 @@ def test_windows_il2cpp_preflight_contract_in_compiled_csharp(tmp_path):
                 "--selected",
                 selected["msvc"]["version"],
                 selected["sdk"]["version"],
+                selected["host_arch"],
                 *[selected["tools"][name] for name in ("cl", "link", "rc", "mt")],
             ],
             capture_output=True,

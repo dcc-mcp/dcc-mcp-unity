@@ -654,23 +654,36 @@ namespace DccMcp.Unity
             }
             var msvc = DccMcpWindowsToolchain.RequiredSelection("MSVC_VERSION");
             var sdk = DccMcpWindowsToolchain.RequiredSelection("SDK_VERSION");
-            return ValidateWindowsMsvcKitReport(report, msvc, sdk, DccMcpWindowsToolchain.InspectPinnedRegisteredToolchain);
+            return ValidateWindowsMsvcKitReport(report, msvc, sdk,
+                DccMcpWindowsToolchain.SelectedHostArchitecture(), DccMcpWindowsToolchain.SelectedSdkRoot(),
+                DccMcpWindowsToolchain.InspectPinnedRegisteredToolchain,
+                DccMcpWindowsToolchain.RequiredSelection("MSVC_KIT_DIR"));
         }
 
         internal static JObject ValidateWindowsMsvcKitReport(
             JObject report, string msvc, string sdk,
             Func<string, string, IDictionary<string, string>, string> inspectRegistered)
         {
+            return ValidateWindowsMsvcKitReport(report, msvc, sdk, "x64", null,
+                (selectedMsvc, selectedSdk, host, tools) => inspectRegistered(selectedMsvc, selectedSdk, tools));
+        }
+
+        internal static JObject ValidateWindowsMsvcKitReport(
+            JObject report, string msvc, string sdk, string host, string sdkRoot,
+            Func<string, string, string, IDictionary<string, string>, string> inspectRegistered, string compilerRoot = null)
+        {
             if (report == null) { throw new InvalidOperationException("msvc-kit doctor returned no report."); }
             var selected = report["toolchain"] as JObject;
             if ((string)report["schema"] != "msvc-kit.doctor.v1" || (string)report["status"] != "passed"
-                || selected == null || (string)selected["arch"] != "x64" || (string)selected["host_arch"] != "x64"
+                || !DccMcpWindowsToolchain.IsSupportedMsvcPin(msvc) || (host != "x64" && host != "x86")
+                || selected == null || (string)selected["arch"] != "x64" || (string)selected["host_arch"] != host
                 || (string)selected.SelectToken("msvc.version") != msvc
                 || (string)selected.SelectToken("sdk.version") != sdk)
             {
                 throw new InvalidOperationException("msvc-kit doctor did not verify the requested exact x64 toolchain.");
             }
             var checks = report["checks"] as JArray;
+            var executionVerified = false;
             foreach (var stage in new[] { "compile", "resource", "link", "manifest", "execute" })
             {
                 var matches = 0;
@@ -681,10 +694,13 @@ namespace DccMcp.Unity
                         var check = item as JObject;
                         if (check != null && (string)check["id"] == "probe." + stage)
                         {
-                            if ((string)check["status"] != "passed")
+                            var status = (string)check["status"];
+                            var crossHostSkip = stage == "execute" && host == "x86" && status == "skipped";
+                            if (status != "passed" && !crossHostSkip)
                             {
                                 throw new InvalidOperationException("msvc-kit doctor did not pass probe." + stage);
                             }
+                            if (stage == "execute") { executionVerified = status == "passed"; }
                             matches++;
                         }
                     }
@@ -692,6 +708,35 @@ namespace DccMcp.Unity
                 if (matches != 1)
                 {
                     throw new InvalidOperationException("msvc-kit doctor lacks one successful probe." + stage);
+                }
+            }
+            if (sdkRoot != null && !SameSelectedPath((string)selected.SelectToken("sdk.install_path"), sdkRoot))
+            {
+                throw new InvalidOperationException("msvc-kit selected a different SDK root from DCC_MCP_UNITY_SDK_DIR.");
+            }
+            if (msvc == "14.0")
+            {
+                if (string.IsNullOrWhiteSpace(compilerRoot)
+                    || !SameSelectedPath((string)selected.SelectToken("msvc.install_path"), Path.Combine(compilerRoot, "VC")))
+                {
+                    throw new InvalidOperationException("VS2015 must resolve the original selected installation's VC directory.");
+                }
+                var familyChecks = 0;
+                foreach (var item in checks)
+                {
+                    var check = item as JObject;
+                    if (check != null && (string)check["id"] == "version.msvc")
+                    {
+                        familyChecks++;
+                        if ((string)check["status"] != "skipped")
+                        {
+                            throw new InvalidOperationException("VS2015 compiler patch version must remain explicitly unverified.");
+                        }
+                    }
+                }
+                if (sdkRoot == null || familyChecks != 1)
+                {
+                    throw new InvalidOperationException("VS2015 must identify family 14.0 with unverified patch version and an explicit SDK root.");
                 }
             }
             var tools = new Dictionary<string, string>();
@@ -703,7 +748,7 @@ namespace DccMcp.Unity
                     if (property.Value.Type == JTokenType.String) { tools[property.Name] = (string)property.Value; }
                 }
             }
-            var error = inspectRegistered(msvc, sdk, tools);
+            var error = inspectRegistered(msvc, sdk, host, tools);
             if (!string.IsNullOrEmpty(error)) { throw new InvalidOperationException(error); }
             report["consumer_cli"] = new JObject
             {
@@ -712,7 +757,16 @@ namespace DccMcp.Unity
             };
             // BuildPlayer is still authoritative; a doctor probe is not a Unity build.
             report["unity_compiler_selection_verified"] = false;
+            report["compiler_version_kind"] = msvc == "14.0" ? "family" : "exact";
+            report["consumer_probe_execution_verified"] = executionVerified;
             return report;
+        }
+
+        private static bool SameSelectedPath(string selected, string requested)
+        {
+            return !string.IsNullOrWhiteSpace(selected)
+                && string.Equals(Path.GetFullPath(selected).TrimEnd('\\', '/'),
+                    Path.GetFullPath(requested).TrimEnd('\\', '/'), StringComparison.OrdinalIgnoreCase);
         }
 
         private static void AdvanceAndroidBuild(JObject store, JObject job)

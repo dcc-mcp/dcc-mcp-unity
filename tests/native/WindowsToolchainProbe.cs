@@ -159,6 +159,60 @@ internal static class WindowsToolchainProbe
         Console.WriteLine("WINDOWS_TOOLCHAIN_FIXTURES_OK");
     }
 
+    private static void CheckLegacySelectedFixtures(string root)
+    {
+        // These files are inert layout fixtures, never native VS2015 build evidence.
+        var legacy = Path.Combine(root, "original VS2015");
+        var sdk = Path.Combine(root, "separate SDK");
+        var noVswhere = Path.Combine(root, "no-vswhere.exe");
+        Touch(legacy, "VC/vcvarsall.bat", "VC/include/crtversion.h", "VC/include/vcruntime.h", "VC/lib/amd64/libcmt.lib",
+            "VC/bin/amd64/cl.exe", "VC/bin/amd64/link.exe", "VC/bin/x86_amd64/cl.exe", "VC/bin/x86_amd64/link.exe");
+        var crt = Path.Combine(legacy, "VC/include/crtversion.h");
+        File.WriteAllText(crt, "#define _VC_CRT_MAJOR_VERSION 14\n#define _VC_CRT_MINOR_VERSION 0\n");
+        const string version = "10.0.14393.0";
+        Touch(sdk, "Include/10.0.14393.0/um/Windows.h", "Lib/10.0.14393.0/um/x64/kernel32.lib",
+            "bin/x64/rc.exe", "bin/x64/mt.exe", "bin/x86/rc.exe", "bin/x86/mt.exe");
+        var reader = Registrations(legacy, sdk);
+        foreach (var host in new[] { "x64", "x86" })
+        {
+            var bin = Path.Combine(legacy, "VC/bin", host == "x64" ? "amd64" : "x86_amd64");
+            File.WriteAllText(Path.Combine(bin, "cl.exe"), host + " compiler fixture");
+            File.WriteAllText(Path.Combine(bin, "link.exe"), host + " linker fixture");
+            File.WriteAllText(Path.Combine(sdk, "bin", host, "rc.exe"), host + " resource fixture");
+            var tools = new Dictionary<string, string>
+            {
+                { "cl", Path.Combine(bin, "cl.exe") }, { "link", Path.Combine(bin, "link.exe") },
+                { "rc", Path.Combine(sdk, "bin", host, "rc.exe") }, { "mt", Path.Combine(sdk, "bin", host, "mt.exe") },
+            };
+            Require(DccMcpWindowsToolchain.InspectPinnedRegisteredToolchain("14.0", version, host, tools, noVswhere, reader) == null,
+                "Original registered VS2015 family and early SDK must match without vswhere for the selected host");
+            Require(DccMcpWindowsToolchain.InspectPinnedRegisteredToolchain("14.0.24215", version, host, tools, noVswhere, reader) != null,
+                "CRT family metadata cannot invent an exact compiler patch pin");
+            Directory.CreateDirectory(Path.Combine(sdk, "bin", version));
+            Require(DccMcpWindowsToolchain.InspectPinnedRegisteredToolchain("14.0", version, host, tools, noVswhere, reader) != null,
+                "A partial versioned SDK directory must never fall back to unversioned tools");
+            Directory.Delete(Path.Combine(sdk, "bin", version));
+            File.WriteAllText(crt, "#define _VC_CRT_MAJOR_VERSION 14\n#define _VC_CRT_MINOR_VERSION 1\n");
+            Require(DccMcpWindowsToolchain.InspectPinnedRegisteredToolchain("14.0", version, host, tools, noVswhere, reader) != null,
+                "A registered directory without v140 family identity must not qualify");
+            File.WriteAllText(crt, "#define _VC_CRT_MAJOR_VERSION 14\n#define _VC_CRT_MINOR_VERSION 0\n");
+        }
+        var cross = new Dictionary<string, string>
+        {
+            { "cl", Path.Combine(legacy, "VC/bin/x86_amd64/cl.exe") },
+            { "link", Path.Combine(legacy, "VC/bin/x86_amd64/link.exe") },
+            { "rc", Path.Combine(sdk, "bin/x86/rc.exe") }, { "mt", Path.Combine(sdk, "bin/x86/mt.exe") },
+        };
+        Require(DccMcpWindowsToolchain.InspectPinnedRegisteredToolchain("14.0", version, "x64", cross, noVswhere, reader) != null,
+            "A different compiler host cannot satisfy the registered-tool hash binding");
+        Require(DccMcpWindowsToolchain.SdkToolsDirectory(sdk, "10.0.22621.0", "x64") == Path.Combine(sdk, "bin", "10.0.22621.0", "x64"),
+            "A modern SDK must never use early unversioned tools");
+        var arguments = DccMcpWindowsToolchain.MsvcKitDoctorArguments(legacy, "14.0", version, "x86", sdk);
+        Require(arguments.Contains("--host-arch \"x86\"") && arguments.Contains("--sdk-dir " + DccMcpWindowsToolchain.QuoteArgument(sdk)),
+            "The real doctor command must carry the explicit host and separate SDK root");
+        Console.WriteLine("WINDOWS_LEGACY_SELECTION_FIXTURES_OK");
+    }
+
     private static int Main(string[] arguments)
     {
         if (arguments.Length == 1 && arguments[0] == "--doctor")
@@ -167,14 +221,14 @@ internal static class WindowsToolchainProbe
             Console.WriteLine(DccMcpWindowsToolchain.ReadMsvcKitDoctor());
             return 0;
         }
-        if (arguments.Length == 7 && arguments[0] == "--selected")
+        if (arguments.Length == 8 && arguments[0] == "--selected")
         {
             var tools = new Dictionary<string, string>
             {
-                { "cl", arguments[3] }, { "link", arguments[4] },
-                { "rc", arguments[5] }, { "mt", arguments[6] },
+                { "cl", arguments[4] }, { "link", arguments[5] },
+                { "rc", arguments[6] }, { "mt", arguments[7] },
             };
-            var error = DccMcpWindowsToolchain.InspectPinnedRegisteredToolchain(arguments[1], arguments[2], tools);
+            var error = DccMcpWindowsToolchain.InspectPinnedRegisteredToolchain(arguments[1], arguments[2], arguments[3], tools);
             Console.WriteLine(error ?? "MSVC_KIT_REGISTERED_SELECTION_OK");
             return error == null ? 0 : 2;
         }
@@ -210,7 +264,7 @@ internal static class WindowsToolchainProbe
         Require(DccMcpWindowsToolchain.QuoteArgument(@"C:\中文 path\") == "\"C:\\中文 path\\\\\"",
             "Doctor arguments must preserve spaces, Unicode and a trailing directory separator");
         var root = Path.Combine(Path.GetTempPath(), "dcc-mcp-toolchain-" + Guid.NewGuid().ToString("N"));
-        try { CheckFixtures(root); }
+        try { CheckFixtures(root); CheckLegacySelectedFixtures(Path.Combine(root, "legacy-selection")); }
         finally { if (Directory.Exists(root)) { Directory.Delete(root, true); } }
         Console.WriteLine("WINDOWS_TOOLCHAIN_CONTRACT_OK");
         return 0;

@@ -13,8 +13,31 @@ namespace DccMcp.Unity
     // remains the authority for this Editor's actual toolchain selection.
     internal static class DccMcpWindowsToolchain
     {
-        internal const string MsvcKitVersion = "0.2.21";
-        internal const string MsvcKitSha256 = "2c76d707b964040ef39a16af344ab873d47673955e63486f49e537885f7b657b";
+        internal const string MsvcKitVersion = "0.2.22";
+        internal const string MsvcKitSha256 = "184f07fb2896f0a7d27c45445990bd7d9e525b6ee58956cfe857bf0027848925";
+
+        internal static bool IsSupportedMsvcPin(string version)
+        {
+            return version == "14.0" || (!string.IsNullOrEmpty(version) && !version.StartsWith("14.0.", StringComparison.Ordinal)
+                && Regex.IsMatch(version, @"\A\d+\.\d+\.\d+\z"));
+        }
+
+        internal static string SelectedHostArchitecture()
+        {
+            var host = Environment.GetEnvironmentVariable("DCC_MCP_UNITY_HOST_ARCH");
+            if (string.IsNullOrWhiteSpace(host)) { return "x64"; }
+            if (host != "x64" && host != "x86")
+            {
+                throw new InvalidOperationException("DCC_MCP_UNITY_HOST_ARCH must be x64 or x86 for the x64 player target.");
+            }
+            return host;
+        }
+
+        internal static string SelectedSdkRoot()
+        {
+            var root = Environment.GetEnvironmentVariable("DCC_MCP_UNITY_SDK_DIR");
+            return string.IsNullOrWhiteSpace(root) ? null : root;
+        }
 
         internal static string RequiredSelection(string suffix)
         {
@@ -25,7 +48,7 @@ namespace DccMcp.Unity
                 throw new InvalidOperationException(
                     "Windows IL2CPP requires self-managed msvc-kit: set " + key
                     + " before starting the Editor. See docs/windows-toolchain.md for local setup"
-                    + " of the pinned v0.2.21 CLI and existing modern VS/SDK. No toolchain is installed automatically.");
+                    + " of the pinned v0.2.22 CLI and existing supported VS/SDK. No toolchain is installed automatically.");
             }
             return value;
         }
@@ -38,20 +61,35 @@ namespace DccMcp.Unity
             var root = RequiredSelection("MSVC_KIT_DIR");
             var msvc = RequiredSelection("MSVC_VERSION");
             var sdk = RequiredSelection("SDK_VERSION");
-            if (!Regex.IsMatch(msvc, @"\A\d+\.\d+\.\d+\z")
+            var sdkRoot = SelectedSdkRoot();
+            SelectedHostArchitecture();
+            if (!IsSupportedMsvcPin(msvc)
                 || !Regex.IsMatch(sdk, @"\A\d+\.\d+\.\d+\.\d+\z"))
             {
-                throw new InvalidOperationException("msvc-kit requires full MSVC and Windows SDK version pins.");
+                throw new InvalidOperationException("msvc-kit requires full modern MSVC/SDK pins, or exactly 14.0 for VS2015.");
+            }
+            if (msvc == "14.0" && sdkRoot == null)
+            {
+                throw new InvalidOperationException("VS2015 family 14.0 requires DCC_MCP_UNITY_SDK_DIR for its existing SDK.");
+            }
+            if ((msvc == "14.0" || sdkRoot != null) && new Version(MsvcKitVersion).CompareTo(new Version(0, 2, 22)) < 0)
+            {
+                throw new InvalidOperationException(
+                    "Legacy or separate-SDK selection requires an approved released msvc-kit 0.2.22+ pin; the consumer release identity is not upgraded.");
             }
             if (!Directory.Exists(root))
             {
                 throw new InvalidOperationException(
                     "The configured msvc-kit toolchain root is missing; prepare it before starting the build.");
             }
+            if (sdkRoot != null && !Directory.Exists(sdkRoot))
+            {
+                throw new InvalidOperationException("DCC_MCP_UNITY_SDK_DIR does not exist; no ambient SDK fallback is allowed.");
+            }
             if (!File.Exists(executable) || HashFile(executable) != MsvcKitSha256)
             {
                 throw new InvalidOperationException(
-                    "msvc-kit is missing or its SHA256 does not match the official v0.2.21 Windows release.");
+                    "msvc-kit is missing or its SHA256 does not match the official v0.2.22 Windows release.");
             }
         }
 
@@ -79,8 +117,7 @@ namespace DccMcp.Unity
             var start = new ProcessStartInfo
             {
                 FileName = executable,
-                Arguments = "doctor --format json --compile --arch x64 --host-arch x64 --msvc-version "
-                    + QuoteArgument(msvc) + " --sdk-version " + QuoteArgument(sdk) + " --dir " + QuoteArgument(root),
+                Arguments = MsvcKitDoctorArguments(root, msvc, sdk, SelectedHostArchitecture(), SelectedSdkRoot()),
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
@@ -105,6 +142,13 @@ namespace DccMcp.Unity
                 }
                 return output.Result;
             }
+        }
+
+        internal static string MsvcKitDoctorArguments(string root, string msvc, string sdk, string host, string sdkRoot)
+        {
+            return "doctor --format json --compile --arch x64 --host-arch " + QuoteArgument(host)
+                + " --msvc-version " + QuoteArgument(msvc) + " --sdk-version " + QuoteArgument(sdk)
+                + " --dir " + QuoteArgument(root) + (sdkRoot == null ? "" : " --sdk-dir " + QuoteArgument(sdkRoot));
         }
 
         internal static string QuoteArgument(string value)
@@ -141,9 +185,15 @@ namespace DccMcp.Unity
         internal static string InspectPinnedRegisteredToolchain(
             string msvc, string sdk, IDictionary<string, string> tools)
         {
+            return InspectPinnedRegisteredToolchain(msvc, sdk, "x64", tools);
+        }
+
+        internal static string InspectPinnedRegisteredToolchain(
+            string msvc, string sdk, string host, IDictionary<string, string> tools)
+        {
             var vswhere = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
                 "Microsoft Visual Studio", "Installer", "vswhere.exe");
-            return InspectPinnedRegisteredToolchain(msvc, sdk, tools, vswhere, ReadRegistration);
+            return InspectPinnedRegisteredToolchain(msvc, sdk, host, tools, vswhere, ReadRegistration);
         }
 
         // Relate the kit's exact selection to registered installations, even when its
@@ -153,33 +203,61 @@ namespace DccMcp.Unity
             string msvc, string sdk, IDictionary<string, string> tools,
             string vswhere, Func<RegistryView, string, string, string> readRegistration)
         {
-            if (!File.Exists(vswhere))
+            return InspectPinnedRegisteredToolchain(msvc, sdk, "x64", tools, vswhere, readRegistration);
+        }
+
+        internal static string InspectPinnedRegisteredToolchain(
+            string msvc, string sdk, string host, IDictionary<string, string> tools,
+            string vswhere, Func<RegistryView, string, string, string> readRegistration)
+        {
+            if (!IsSupportedMsvcPin(msvc) || (host != "x64" && host != "x86"))
             {
-                return "Pinned msvc-kit selection requires modern registered Visual Studio; vswhere is missing.";
+                return "Unsupported pinned compiler version or host architecture.";
             }
             var matchedCompiler = false;
-            foreach (var registration in ReadVisualStudioRegistrations(vswhere)
-                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+            if (msvc == "14.0")
             {
-                var toolset = Path.Combine(registration.Trim(), "VC", "Tools", "MSVC", msvc);
-                var bin = Path.Combine(toolset, "bin", "Hostx64", "x64");
-                if (HasCompilerFiles(toolset, Path.Combine("bin", "Hostx64", "x64"), "x64")
-                    && MatchesTool(tools, "cl", Path.Combine(bin, "cl.exe"))
-                    && MatchesTool(tools, "link", Path.Combine(bin, "link.exe")))
+                var legacy = readRegistration(RegistryView.Registry32, @"SOFTWARE\Microsoft\VisualStudio\SxS\VS7", "14.0");
+                if (!string.IsNullOrWhiteSpace(legacy) && HasLegacyFamilyIdentity(legacy))
                 {
-                    matchedCompiler = true;
-                    break;
+                    var vc = Path.Combine(legacy, "VC");
+                    var relativeBin = Path.Combine("bin", host == "x64" ? "amd64" : "x86_amd64");
+                    var bin = Path.Combine(vc, relativeBin);
+                    matchedCompiler = HasCompilerFiles(vc, relativeBin, "amd64")
+                        && MatchesTool(tools, "cl", Path.Combine(bin, "cl.exe"))
+                        && MatchesTool(tools, "link", Path.Combine(bin, "link.exe"));
+                }
+            }
+            else
+            {
+                if (!File.Exists(vswhere))
+                {
+                    return "Pinned modern msvc-kit selection requires registered Visual Studio; vswhere is missing.";
+                }
+                foreach (var registration in ReadVisualStudioRegistrations(vswhere)
+                    .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries))
+                {
+                    var toolset = Path.Combine(registration.Trim(), "VC", "Tools", "MSVC", msvc);
+                    var relativeBin = Path.Combine("bin", "Host" + host, "x64");
+                    var bin = Path.Combine(toolset, relativeBin);
+                    if (HasCompilerFiles(toolset, relativeBin, "x64")
+                        && MatchesTool(tools, "cl", Path.Combine(bin, "cl.exe"))
+                        && MatchesTool(tools, "link", Path.Combine(bin, "link.exe")))
+                    {
+                        matchedCompiler = true;
+                        break;
+                    }
                 }
             }
             if (!matchedCompiler)
             {
-                return "msvc-kit selected compiler/version does not match a registered modern Visual Studio x64 toolset.";
+                return "msvc-kit selected compiler/version/host does not match a registered Visual Studio x64-target toolset.";
             }
             foreach (var view in new[] { RegistryView.Registry32, RegistryView.Registry64 })
             {
                 var root = readRegistration(view, @"SOFTWARE\Microsoft\Windows Kits\Installed Roots", "KitsRoot10");
                 if (string.IsNullOrWhiteSpace(root)) { continue; }
-                var bin = Path.Combine(root, "bin", sdk, "x64");
+                var bin = SdkToolsDirectory(root, sdk, host);
                 if (File.Exists(Path.Combine(root, "Include", sdk, "um", "Windows.h"))
                     && File.Exists(Path.Combine(root, "Lib", sdk, "um", "x64", "kernel32.lib"))
                     && MatchesTool(tools, "rc", Path.Combine(bin, "rc.exe"))
@@ -189,6 +267,23 @@ namespace DccMcp.Unity
                 }
             }
             return "msvc-kit selected SDK version/tools do not match a registered Windows SDK.";
+        }
+
+        private static bool HasLegacyFamilyIdentity(string root)
+        {
+            var crt = Path.Combine(root, "VC", "include", "crtversion.h");
+            if (!File.Exists(Path.Combine(root, "VC", "vcvarsall.bat")) || !File.Exists(crt)) { return false; }
+            var contents = File.ReadAllText(crt);
+            return Regex.IsMatch(contents, @"(?m)^\s*#\s*define\s+_VC_CRT_MAJOR_VERSION\s+14(?:\s|$)")
+                && Regex.IsMatch(contents, @"(?m)^\s*#\s*define\s+_VC_CRT_MINOR_VERSION\s+0(?:\s|$)");
+        }
+
+        internal static string SdkToolsDirectory(string root, string version, string host)
+        {
+            var versioned = Path.Combine(root, "bin", version);
+            var early = version == "10.0.10240.0" || version == "10.0.10586.0" || version == "10.0.14393.0";
+            // A partial versioned directory is an incomplete selection, never a fallback.
+            return early && !Directory.Exists(versioned) ? Path.Combine(root, "bin", host) : Path.Combine(versioned, host);
         }
 
         internal static void Ensure(
@@ -317,7 +412,8 @@ namespace DccMcp.Unity
                 if (!Directory.Exists(tools)) { continue; }
                 foreach (var toolset in Directory.GetDirectories(tools))
                 {
-                    if (HasCompilerFiles(toolset, Path.Combine("bin", "Hostx64", "x64"), "x64"))
+                    if (HasCompilerFiles(toolset, Path.Combine("bin", "Hostx64", "x64"), "x64")
+                        || HasCompilerFiles(toolset, Path.Combine("bin", "Hostx86", "x64"), "x64"))
                     {
                         return true;
                     }
@@ -358,8 +454,8 @@ namespace DccMcp.Unity
                     && File.Exists(Path.Combine(include, "ucrt", "stdio.h"))
                     && File.Exists(Path.Combine(libraries, "um", "x64", "kernel32.lib"))
                     && File.Exists(Path.Combine(libraries, "ucrt", "x64", "ucrt.lib"))
-                    && (HasSdkTools(Path.Combine(sdkRoot, "bin", version, "x64"))
-                        || (sdkVersion.Build <= 14393 && HasSdkTools(Path.Combine(sdkRoot, "bin", "x64")))))
+                    && (HasSdkTools(SdkToolsDirectory(sdkRoot, version, "x64"))
+                        || HasSdkTools(SdkToolsDirectory(sdkRoot, version, "x86"))))
                 {
                     return true;
                 }

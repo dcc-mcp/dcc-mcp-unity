@@ -2,7 +2,7 @@
 
 The Python sidecar and C# Editor bridge need no MSVC for ordinary use. Mono
 player builds also remain independent of MSVC. Windows IL2CPP builds and Windows
-PyOxidizer packaging require the project's own **msvc-kit v0.2.21**. There is no
+PyOxidizer packaging require the project's own **msvc-kit v0.2.22**. There is no
 silent fallback to an ambient compiler when configuration or diagnostics fail.
 
 ## Required native-toolchain selection
@@ -10,15 +10,29 @@ silent fallback to an ambient compiler when configuration or diagnostics fail.
 Provide all four variables before starting the Windows Editor or standalone
 builder:
 
-- `DCC_MCP_UNITY_MSVC_KIT`: absolute path to the official v0.2.21 Windows x64 CLI.
-- `DCC_MCP_UNITY_MSVC_KIT_DIR`: explicit portable-layout toolchain root.
-- `DCC_MCP_UNITY_MSVC_VERSION`: complete version, for example `14.44.35207`.
+- `DCC_MCP_UNITY_MSVC_KIT`: absolute path to the official v0.2.22 Windows x64 CLI.
+- `DCC_MCP_UNITY_MSVC_KIT_DIR`: explicit toolchain root; for legacy, the original
+  VS2015 installation directory containing `VC`, never a relabeled modern tree.
+- `DCC_MCP_UNITY_MSVC_VERSION`: complete modern version, for example
+  `14.44.35207`, or exactly family `14.0` for identified VS2015.
 - `DCC_MCP_UNITY_SDK_VERSION`: complete version, for example `10.0.22621.0`.
 
+Optional selection settings:
+
+- `DCC_MCP_UNITY_HOST_ARCH`: `x64` (default) or explicit `x86`; the target remains
+  x64. The selected compiler and SDK tools must match that host.
+- `DCC_MCP_UNITY_SDK_DIR`: an existing Windows Kits/10 root separate from the
+  compiler root. Required for VS2015, optional for modern layouts. No ambient
+  registry/environment SDK is substituted for an explicit root.
+
+Legacy and separate-SDK selection use the approved released msvc-kit v0.2.22
+contract. An older consumer release identity fails early with an upgrade
+diagnostic; no unpublished executable or digest is used.
+
 Both consumers verify the CLI's published SHA256 before executing it:
-`2c76d707b964040ef39a16af344ab873d47673955e63486f49e537885f7b657b`.
+`184f07fb2896f0a7d27c45445990bd7d9e525b6ee58956cfe857bf0027848925`.
 The approved binary is the 7.4 MB asset from the
-[official v0.2.21 release](https://github.com/loonghao/msvc-kit/releases/tag/v0.2.21).
+[official v0.2.22 release](https://github.com/loonghao/msvc-kit/releases/tag/v0.2.22).
 Updating this identity is an explicit consumer change, not a `latest` download.
 
 The real command is:
@@ -31,10 +45,13 @@ The real command is:
   --sdk-version $env:DCC_MCP_UNITY_SDK_VERSION
 ```
 
-Its `msvc-kit.doctor.v1` report must confirm the exact versions and x64 host and
-target. All five native probe stages (C++ compile, resource compile, link,
-manifest, execute) must pass once each; missing, duplicate or skipped stages do
-not qualify. Doctor has a 180-second consumer deadline. A missing CLI, wrong
+Use the selected host in `--host-arch`; add `--sdk-dir` when configured.
+Its `msvc-kit.doctor.v1` report must confirm the requested compiler version
+(or explicit legacy family), SDK version, host and x64 target. C++ compile,
+resource compile, link and manifest must each pass once. Native x64 host/target
+also requires execution to pass. Only explicit x86-hosted x64 cross compilation
+may report `probe.execute: skipped`; `consumer_probe_execution_verified` is then
+false. Missing/duplicate stages or any other skipped build stage fail closed. Doctor has a 180-second consumer deadline. A missing CLI, wrong
 hash, failed probe or mismatched selection blocks the native build and reports
 the failure. Doctor never installs missing components.
 
@@ -42,11 +59,11 @@ the failure. Doctor never installs missing components.
 
 `.github/scripts/prepare-msvc-kit.ps1` is a PowerShell 7 CI preparation script.
 It uses registered modern Visual Studio and Windows SDK installations, chooses
-complete x64 versions (honoring explicit version pins), downloads only the
-pinned CLI, and verifies its published digest. It exports the four variables
+complete x64-target versions for the selected host (honoring explicit version pins), downloads only the
+pinned CLI, and verifies its published digest. It exports the four required variables and selected host
 through the current job's `GITHUB_ENV`.
 
-msvc-kit expects a single root containing `VC/Tools/MSVC` and `Windows Kits/10`.
+The default modern portable layout has a single root containing `VC/Tools/MSVC` and `Windows Kits/10`.
 The preparation script creates a fresh UUID-named folder under `RUNNER_TEMP`
 with directory junctions to the existing registered tools. It records original
 paths, exact versions and tool hashes in a preparation manifest. It does not
@@ -74,13 +91,15 @@ the persistent job checks before target switching and again before BuildPlayer:
 
 - Windows Editor host and matching Windows x64 IL2CPP player resources.
 - Existing registered VS C++ tools and Windows SDK availability.
-- Mandatory msvc-kit configuration, full version pins, root availability and CLI hash.
+- Mandatory msvc-kit configuration, supported version pins, root availability and CLI hash.
 
 Only the final `ready_to_build` phase, immediately before BuildPlayer, runs:
 
 - The real, hash-pinned msvc-kit doctor compile contract described above, once.
-- The selected full modern MSVC version, compiler/linker hashes, and selected
-  SDK version/resource/manifest-tool hashes correspond to registered tools.
+- The selected full modern MSVC version or verified VS2015 family, host-specific
+  compiler/linker hashes, and selected SDK version/resource/manifest-tool hashes
+  correspond to registered tools. Legacy compiler and explicit SDK roots must
+  also match the doctor selection.
 
 The C# process uses Windows argument quoting and drains both UTF-8 output
 streams while waiting; spaces, Unicode and trailing directory separators are
@@ -96,20 +115,28 @@ actual Windows IL2CPP build and build-log readback of compiler/SDK selection.
 Compiler compatibility depends on the installed Unity version; see
 [Unity Windows requirements](https://docs.unity3d.com/6000.0/Documentation/Manual/windows-requirements-and-compatibility.html).
 
-### Legacy compatibility blocker
+### VS2015 and early Windows 10 SDK selection
 
-The earlier read-only registration checker still recognizes VS2015 and early
-Windows 10 SDK layouts, and its fixtures remain. **A VS2015-only native build is
-not supported by the new mandatory msvc-kit gate:** v0.2.21 resolves modern
-`VC/Tools/MSVC/<version>` layouts and versioned SDK tools, whereas VS2015 uses
-legacy compiler layouts, sometimes with x86-hosted x64 tools. The pinned
-registration association check therefore requires modern VS as well.
+Legacy mode requires the original registered VS2015 root, its `VC/vcvarsall.bat`
+and `VC/include/crtversion.h` identifying CRT major/minor 14/0, and an explicit
+SDK root. It reports only the verified compiler family `14.0`. A made-up patch
+pin such as `14.0.24215` is rejected. `version.msvc: skipped` records that the
+compiler patch version is unverified; `compiler_version_kind` is `family`.
 
-This is a real compatibility gap, not validation supplied by an old green
-fixture. Keeping Unity 2018 C#/.NET 4.x compilation support does not certify
-Unity 2018 + VS2015 native builds. Preserving that exact native configuration
-requires a tested msvc-kit legacy-selection enhancement before this mandatory
-gate can be accepted for the full historical support scope.
+The x64 host selects `VC/bin/amd64`; the x86 host selects `VC/bin/x86_amd64`.
+Both target `VC/lib/amd64`. Compiler/linker hashes must agree with that registered
+host selection. SDK 10.0.10240.0, 10.0.10586.0 and 10.0.14393.0 may use
+`bin/<host>` only when the entire `bin/<version>` directory is absent. A partial
+versioned directory or modern SDK cannot fall back. Informational
+`version.sdk_tools: skipped` does not waive the required native build stages.
+
+The CI preparation script discovers modern registered installations only.
+Legacy selection is explicit; it never copies or renames old installations into
+modern layouts. The caller pins the published v0.2.22 release identity.
+Directory/JSON fixtures are not
+native VS2015 compilation evidence. Unity 2018 C#/.NET 4.x compatibility also
+does not prove Unity 2018 + VS2015 native builds. A real supported legacy Windows
+installation and Unity build remain required acceptance evidence.
 
 ## Windows standalone packaging
 
@@ -118,6 +145,10 @@ python tools/build_binary.py --msvc-kit C:\tools\msvc-kit.exe `
   --msvc-kit-dir C:\tools\compiler `
   --msvc-version 14.44.35207 --sdk-version 10.0.22621.0
 ```
+
+The standalone options `--host-arch` and `--sdk-dir` mirror the optional
+environment settings above. Legacy selection uses `--msvc-version 14.0` with
+`--msvc-kit-dir` pointing to the original VS2015 root and a required `--sdk-dir`.
 
 The standalone consumer requires nonempty, case-unambiguous PATH/INCLUDE/LIB
 lists and checks CC/CXX, target-specific compiler variables and Cargo's x64

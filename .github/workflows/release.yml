@@ -81,6 +81,7 @@ jobs:
         env:
           DCC_MCP_UNITY_MSVC_VERSION: ${{ vars.DCC_MCP_UNITY_MSVC_VERSION }}
           DCC_MCP_UNITY_SDK_VERSION: ${{ vars.DCC_MCP_UNITY_SDK_VERSION }}
+          DCC_MCP_UNITY_HOST_ARCH: ${{ vars.DCC_MCP_UNITY_HOST_ARCH }}
         run: ./.github/scripts/prepare-msvc-kit.ps1
       - name: Build standalone sidecar
         env:
@@ -90,6 +91,8 @@ jobs:
           DCC_MCP_UNITY_MSVC_KIT_DIR: ${{ runner.os == 'Windows' && (vars.DCC_MCP_UNITY_MSVC_KIT_DIR || env.DCC_MCP_UNITY_MSVC_KIT_DIR) || '' }}
           DCC_MCP_UNITY_MSVC_VERSION: ${{ runner.os == 'Windows' && (vars.DCC_MCP_UNITY_MSVC_VERSION || env.DCC_MCP_UNITY_MSVC_VERSION) || '' }}
           DCC_MCP_UNITY_SDK_VERSION: ${{ runner.os == 'Windows' && (vars.DCC_MCP_UNITY_SDK_VERSION || env.DCC_MCP_UNITY_SDK_VERSION) || '' }}
+          DCC_MCP_UNITY_SDK_DIR: ${{ runner.os == 'Windows' && vars.DCC_MCP_UNITY_SDK_DIR || '' }}
+          DCC_MCP_UNITY_HOST_ARCH: ${{ runner.os == 'Windows' && (vars.DCC_MCP_UNITY_HOST_ARCH || env.DCC_MCP_UNITY_HOST_ARCH) || '' }}
         run: python tools/build_binary.py
       - name: Archive standalone (Unix)
         if: runner.os != 'Windows'

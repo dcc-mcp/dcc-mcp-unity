@@ -3,7 +3,8 @@
 [CmdletBinding()]
 param(
     [string] $MsvcVersion = $env:DCC_MCP_UNITY_MSVC_VERSION,
-    [string] $SdkVersion = $env:DCC_MCP_UNITY_SDK_VERSION
+    [string] $SdkVersion = $env:DCC_MCP_UNITY_SDK_VERSION,
+    [string] $HostArch = $env:DCC_MCP_UNITY_HOST_ARCH
 )
 
 Set-StrictMode -Version Latest
@@ -14,6 +15,13 @@ if (-not $IsWindows -or $PSVersionTable.PSVersion.Major -lt 7) {
 }
 if (-not $env:RUNNER_TEMP -or -not $env:GITHUB_ENV) {
     throw 'RUNNER_TEMP and GITHUB_ENV are required; this preparation is scoped to one CI job.'
+}
+if (-not $HostArch) { $HostArch = 'x64' }
+if ($HostArch -cnotin @('x64', 'x86')) {
+    throw 'DCC_MCP_UNITY_HOST_ARCH must be x64 or x86 for the x64 target.'
+}
+if ($MsvcVersion -eq '14.0') {
+    throw 'VS2015 requires an explicit original installation root and SDK root; this CI preparation only discovers modern VS.'
 }
 if ($MsvcVersion -and $MsvcVersion -notmatch '^\d+\.\d+\.\d+$') {
     throw 'DCC_MCP_UNITY_MSVC_VERSION must be a full version, for example 14.44.35207.'
@@ -85,7 +93,7 @@ $compilers = @(
             if ($directory.Name -notmatch '^\d+\.\d+\.\d+$') { continue }
             if ($MsvcVersion -and $directory.Name -ne $MsvcVersion) { continue }
             if (Test-RequiredFiles $directory.FullName @(
-                'bin/Hostx64/x64/cl.exe', 'bin/Hostx64/x64/link.exe', 'bin/Hostx64/x64/lib.exe',
+                "bin/Host$HostArch/x64/cl.exe", "bin/Host$HostArch/x64/link.exe", "bin/Host$HostArch/x64/lib.exe",
                 'include/vcruntime.h', 'include/vector', 'lib/x64/msvcrt.lib', 'lib/x64/libcmt.lib',
                 'lib/x64/vcruntime.lib', 'lib/x64/msvcprt.lib'
             )) {
@@ -116,7 +124,7 @@ $sdks = @(
             if (Test-RequiredFiles $sdkRoot @(
                 "Include/$version/um/Windows.h", "Include/$version/ucrt/stdio.h",
                 "Include/$version/shared/sdkddkver.h", "Lib/$version/um/x64/kernel32.lib",
-                "Lib/$version/ucrt/x64/ucrt.lib", "bin/$version/x64/rc.exe", "bin/$version/x64/mt.exe"
+                "Lib/$version/ucrt/x64/ucrt.lib", "bin/$version/$HostArch/rc.exe", "bin/$version/$HostArch/mt.exe"
             )) {
                 [pscustomobject]@{ Version = [version] $version; VersionText = $version; Root = $sdkRoot }
             }
@@ -134,12 +142,12 @@ if ($null -eq $selectedSdk) {
 $workspace = Join-Path $env:RUNNER_TEMP ('dcc-mcp-msvc-kit-' + [guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $workspace
 $cli = Join-Path $workspace 'msvc-kit.exe'
-$downloadUrl = 'https://github.com/loonghao/msvc-kit/releases/download/v0.2.21/msvc-kit-x86_64-windows.exe'
-$expectedSha = '2c76d707b964040ef39a16af344ab873d47673955e63486f49e537885f7b657b'
+$downloadUrl = 'https://github.com/loonghao/msvc-kit/releases/download/v0.2.22/msvc-kit-x86_64-windows.exe'
+$expectedSha = '184f07fb2896f0a7d27c45445990bd7d9e525b6ee58956cfe857bf0027848925'
 Invoke-WebRequest -Uri $downloadUrl -OutFile $cli -TimeoutSec 120
 $actualSha = (Get-FileHash -LiteralPath $cli -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($actualSha -ne $expectedSha) {
-    throw "msvc-kit v0.2.21 integrity mismatch: expected $expectedSha, got $actualSha. The binary was not executed."
+    throw "msvc-kit v0.2.22 integrity mismatch: expected $expectedSha, got $actualSha. The binary was not executed."
 }
 
 $layout = Join-Path $workspace 'toolchain'
@@ -154,21 +162,21 @@ $null = New-Item -ItemType Junction -Path $sdkLink -Value $selectedSdk.Root
 
 $tools = [ordered]@{}
 foreach ($name in @('cl', 'link', 'lib')) {
-    $path = Join-Path $selectedCompiler.Root "bin/Hostx64/x64/$name.exe"
+    $path = Join-Path $selectedCompiler.Root "bin/Host$HostArch/x64/$name.exe"
     $tools[$name] = [ordered]@{ registered_path = $path; sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() }
 }
 foreach ($name in @('rc', 'mt')) {
-    $path = Join-Path $selectedSdk.Root "bin/$($selectedSdk.VersionText)/x64/$name.exe"
+    $path = Join-Path $selectedSdk.Root "bin/$($selectedSdk.VersionText)/$HostArch/$name.exe"
     $tools[$name] = [ordered]@{ registered_path = $path; sha256 = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() }
 }
 $manifest = Join-Path $workspace 'preparation.json'
 [ordered]@{
     schema = 'dcc-mcp-unity.msvc-kit-preparation.v1'
-    cli_release = 'v0.2.21'
+    cli_release = 'v0.2.22'
     cli_url = $downloadUrl
     cli_path = $cli
     cli_sha256 = $actualSha
-    host_arch = 'x64'
+    host_arch = $HostArch
     target_arch = 'x64'
     selected_msvc_version = $selectedCompiler.VersionText
     selected_sdk_version = $selectedSdk.VersionText
@@ -189,11 +197,12 @@ $exports = [ordered]@{
     DCC_MCP_UNITY_MSVC_KIT_DIR = $layout
     DCC_MCP_UNITY_MSVC_VERSION = $selectedCompiler.VersionText
     DCC_MCP_UNITY_SDK_VERSION = $selectedSdk.VersionText
+    DCC_MCP_UNITY_HOST_ARCH = $HostArch
     DCC_MCP_UNITY_MSVC_KIT_PREPARATION = $manifest
 }
 foreach ($pair in $exports.GetEnumerator()) {
     if ($pair.Value -match '[\r\n]') { throw 'Multiline toolchain values cannot be exported to the CI environment.' }
     Add-Content -LiteralPath $env:GITHUB_ENV -Value "$($pair.Key)=$($pair.Value)" -Encoding utf8
 }
-Write-Host "Prepared msvc-kit v0.2.21 with registered MSVC $($selectedCompiler.VersionText) and SDK $($selectedSdk.VersionText), x64 host/target."
+Write-Host "Prepared msvc-kit v0.2.22 with registered MSVC $($selectedCompiler.VersionText) and SDK $($selectedSdk.VersionText), $HostArch host / x64 target."
 Write-Host "Preparation evidence: $manifest. No doctor, Unity player build or PyOxidizer build has been claimed by this step."
