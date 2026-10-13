@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Reflection;
 using System.Text;
@@ -103,6 +104,22 @@ internal static class WindowsToolchainProbe
             "Redirected UTF-8 must preserve the Chinese installation path");
         Require(DccMcpWindowsToolchain.InspectRegisteredToolchain(fakeVswhere, Registrations(null, sdk)) == null,
             "Registered modern C++ tools with a Chinese installation path must be found");
+        var pinnedTools = new Dictionary<string, string>
+        {
+            { "cl", Path.Combine(modern, "VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/cl.exe") },
+            { "link", Path.Combine(modern, "VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64/link.exe") },
+            { "rc", Path.Combine(sdk, "bin/10.0.10240.0/x64/rc.exe") },
+            { "mt", Path.Combine(sdk, "bin/10.0.10240.0/x64/mt.exe") },
+        };
+        Require(DccMcpWindowsToolchain.InspectPinnedRegisteredToolchain(
+            "14.44.35207", "10.0.10240.0", pinnedTools, fakeVswhere, Registrations(null, sdk)) == null,
+            "Pinned kit selection must correspond to registered compiler and SDK tools");
+        var unrelated = Path.Combine(root, "unrelated-cl.exe");
+        File.WriteAllText(unrelated, "different compiler");
+        pinnedTools["cl"] = unrelated;
+        Require(DccMcpWindowsToolchain.InspectPinnedRegisteredToolchain(
+            "14.44.35207", "10.0.10240.0", pinnedTools, fakeVswhere, Registrations(null, sdk)).Contains("does not match"),
+            "A different portable compiler cannot stand in for the registered selection");
         File.Delete(Path.Combine(modern, "VC", "Tools", "MSVC", "14.44.35207", "lib", "x64", "libcmt.lib"));
         Require(DccMcpWindowsToolchain.InspectRegisteredToolchain(fakeVswhere, Registrations(null, sdk)).Contains("C++ toolset"),
             "Incomplete modern C++ libraries must be rejected");
@@ -116,6 +133,23 @@ internal static class WindowsToolchainProbe
 
     private static int Main(string[] arguments)
     {
+        if (arguments.Length == 1 && arguments[0] == "--doctor")
+        {
+            Console.OutputEncoding = new UTF8Encoding(false);
+            Console.WriteLine(DccMcpWindowsToolchain.ReadMsvcKitDoctor());
+            return 0;
+        }
+        if (arguments.Length == 7 && arguments[0] == "--selected")
+        {
+            var tools = new Dictionary<string, string>
+            {
+                { "cl", arguments[3] }, { "link", arguments[4] },
+                { "rc", arguments[5] }, { "mt", arguments[6] },
+            };
+            var error = DccMcpWindowsToolchain.InspectPinnedRegisteredToolchain(arguments[1], arguments[2], tools);
+            Console.WriteLine(error ?? "MSVC_KIT_REGISTERED_SELECTION_OK");
+            return error == null ? 0 : 2;
+        }
         if (arguments.Length > 0 && arguments[0] == "-all")
         {
             Require(string.Join(" ", arguments) == "-all -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath -utf8",
@@ -144,6 +178,8 @@ internal static class WindowsToolchainProbe
         MustFail(() => DccMcpWindowsToolchain.Ensure(true, true, true, () => "SDK absent"), "SDK absent");
         DccMcpWindowsToolchain.Ensure(true, true, true, inspect);
         Require(probed, "IL2CPP must verify Unity compiler discovery");
+        Require(DccMcpWindowsToolchain.QuoteArgument(@"C:\中文 path\") == "\"C:\\中文 path\\\\\"",
+            "Doctor arguments must preserve spaces, Unicode and a trailing directory separator");
         var root = Path.Combine(Path.GetTempPath(), "dcc-mcp-toolchain-" + Guid.NewGuid().ToString("N"));
         try { CheckFixtures(root); }
         finally { if (Directory.Exists(root)) { Directory.Delete(root, true); } }

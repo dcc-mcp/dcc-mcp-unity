@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import ntpath
 import os
 import re
 import shutil
@@ -16,26 +17,45 @@ ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / "build"
 OUTPUT = ROOT / "dist" / "standalone"
 NAME = "dcc-mcp-unity" + (".exe" if sys.platform == "win32" else "")
+MSVC_KIT_VERSION = "0.2.21"
+MSVC_KIT_SHA256 = "2c76d707b964040ef39a16af344ab873d47673955e63486f49e537885f7b657b"
+PROBE_STAGES = ("compile", "resource", "link", "manifest", "execute")
 
 
 def _run(command: list[str], environment: dict[str, str] | None = None) -> None:
     subprocess.run(command, cwd=ROOT, check=True, env=environment)
 
 
+def _verify_msvc_kit(executable: str) -> None:
+    path = Path(executable)
+    if not path.is_file():
+        raise ValueError(
+            "The pinned msvc-kit executable is missing. Prepare the official v0.2.21 CLI "
+            "and an existing toolchain; see docs/windows-toolchain.md "
+            "(.github/scripts/prepare-msvc-kit.ps1 prepares CI runners only)."
+        )
+    if hashlib.sha256(path.read_bytes()).hexdigest() != MSVC_KIT_SHA256:
+        raise ValueError("msvc-kit SHA256 does not match the approved official v0.2.21 release")
+
+
 def _toolchain_environment(args: argparse.Namespace) -> tuple[dict[str, str] | None, dict | None]:
     requested = (args.msvc_kit, args.msvc_version, args.sdk_version, args.msvc_kit_dir)
-    if not any(requested):
-        return None, None
     if sys.platform != "win32":
+        if not any(requested):
+            return None, None
         raise ValueError("The msvc-kit build contract is supported only on Windows")
-    if not args.msvc_kit or not args.msvc_version or not args.sdk_version:
+    if not all(requested):
         raise ValueError(
-            "An explicit msvc-kit build requires --msvc-kit, --msvc-version and --sdk-version"
+            "Windows standalone builds require msvc-kit: supply --msvc-kit, --msvc-kit-dir, "
+            "--msvc-version and --sdk-version, or their DCC_MCP_UNITY_* environment variables. "
+            "See docs/windows-toolchain.md for local setup or the CI preparation script; "
+            "no compiler or SDK is installed automatically."
         )
     if not re.fullmatch(r"\d+\.\d+\.\d+", args.msvc_version):
         raise ValueError("Pin a full MSVC version, for example 14.44.35207")
     if not re.fullmatch(r"\d+(?:\.\d+){3}", args.sdk_version):
         raise ValueError("Pin a full SDK version, for example 10.0.22621.0")
+    _verify_msvc_kit(args.msvc_kit)
     command = [
         args.msvc_kit,
         "doctor",
@@ -51,19 +71,44 @@ def _toolchain_environment(args: argparse.Namespace) -> tuple[dict[str, str] | N
         "--sdk-version",
         args.sdk_version,
     ]
-    if args.msvc_kit_dir:
-        command += ["--dir", args.msvc_kit_dir]
-    report = json.loads(subprocess.check_output(command, text=True, encoding="utf-8"))
+    command += ["--dir", args.msvc_kit_dir]
+    try:
+        output = subprocess.check_output(command, text=True, encoding="utf-8", timeout=180)
+    except subprocess.CalledProcessError as error:
+        raise ValueError(
+            f"msvc-kit doctor failed (exit {error.returncode}); repair the selected toolchain. "
+            f"Doctor report: {error.output}"
+        ) from error
+    except subprocess.TimeoutExpired as error:
+        raise ValueError("msvc-kit doctor exceeded its 180-second deadline") from error
+    report = json.loads(output)
+    if not isinstance(report, dict):
+        raise ValueError("msvc-kit doctor must return a JSON object")
     if report.get("schema") != "msvc-kit.doctor.v1" or report.get("status") != "passed":
         raise ValueError("Requested msvc-kit must report a passing msvc-kit.doctor.v1 contract")
+    checks = report.get("checks", [])
+    if not isinstance(checks, list) or any(not isinstance(check, dict) for check in checks):
+        raise ValueError("msvc-kit doctor must include its individual probe checks")
+    for stage in PROBE_STAGES:
+        matches = [check for check in checks if check.get("id") == f"probe.{stage}"]
+        if len(matches) != 1 or matches[0].get("status") != "passed":
+            raise ValueError(f"msvc-kit doctor did not execute and pass probe.{stage}")
     toolchain = report.get("toolchain", {})
+    if not isinstance(toolchain, dict):
+        raise ValueError("msvc-kit doctor must include its selected toolchain")
     # Doctor serializes QueryResult.arch and host_arch as strings. Both must
     # match the explicit x64 selection sent above, independently of version pins.
     if toolchain.get("arch") != "x64" or toolchain.get("host_arch") != "x64":
         raise ValueError("msvc-kit selected a different or missing x64 host/target architecture")
-    if toolchain.get("msvc", {}).get("version") != args.msvc_version:
+    if (
+        not isinstance(toolchain.get("msvc"), dict)
+        or toolchain["msvc"].get("version") != args.msvc_version
+    ):
         raise ValueError("msvc-kit selected a different MSVC version from the requested pin")
-    if toolchain.get("sdk", {}).get("version") != args.sdk_version:
+    if (
+        not isinstance(toolchain.get("sdk"), dict)
+        or toolchain["sdk"].get("version") != args.sdk_version
+    ):
         raise ValueError("msvc-kit selected a different SDK version from the requested pin")
     variables = toolchain.get("env_vars")
     if (
@@ -82,6 +127,29 @@ def _toolchain_environment(args: argparse.Namespace) -> tuple[dict[str, str] | N
     for key in ("path", "include", "lib"):
         if not any(part.strip() for part in normalized.get(key, "").split(";")):
             raise ValueError(f"msvc-kit doctor must supply a non-empty {key.upper()} search list")
+    tools = toolchain.get("tools", {})
+    if not isinstance(tools, dict):
+        raise ValueError("msvc-kit doctor must supply the selected compiler/linker paths")
+    bindings = {
+        "CC": "cl",
+        "CXX": "cl",
+        "CC_x86_64-pc-windows-msvc": "cl",
+        "CC_x86_64_pc_windows_msvc": "cl",
+        "CXX_x86_64-pc-windows-msvc": "cl",
+        "CXX_x86_64_pc_windows_msvc": "cl",
+        "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER": "link",
+    }
+    for variable, tool in bindings.items():
+        selected = tools.get(tool)
+        exported = normalized.get(variable.casefold())
+        if (
+            not isinstance(selected, str)
+            or not selected
+            or not exported
+            or ntpath.normcase(ntpath.normpath(exported))
+            != ntpath.normcase(ntpath.normpath(selected))
+        ):
+            raise ValueError(f"msvc-kit {variable} must select the reported {tool} executable")
     environment = os.environ.copy()
     # Windows environment keys are case insensitive; preserve the provided PATH once.
     for key, value in variables.items():
@@ -99,6 +167,7 @@ def _toolchain_environment(args: argparse.Namespace) -> tuple[dict[str, str] | N
             if previous.casefold() == key.casefold():
                 del environment[previous]
         environment[key] = value
+    report["consumer_cli"] = {"version": MSVC_KIT_VERSION, "sha256": MSVC_KIT_SHA256}
     return environment, report
 
 

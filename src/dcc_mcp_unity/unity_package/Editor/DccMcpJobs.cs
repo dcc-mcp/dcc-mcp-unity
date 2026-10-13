@@ -565,6 +565,7 @@ namespace DccMcp.Unity
 
         private static void AdvanceWindowsBuild(JObject store, JObject job)
         {
+            JObject toolchain = null;
             var phase = (string)job["phase"];
             if (phase == "building")
             {
@@ -577,7 +578,7 @@ namespace DccMcp.Unity
                 "Windows x64",
                 BuildTargetGroup.Standalone,
                 BuildTarget.StandaloneWindows64,
-                EnsureWindowsBuildToolchain);
+                () => { toolchain = EnsureWindowsBuildToolchain(); });
             if (scenes == null)
             {
                 return;
@@ -627,16 +628,86 @@ namespace DccMcp.Unity
                 ["scenes"] = sceneArray,
                 ["bytes"] = (long)report.summary.totalSize,
                 ["executable_bytes"] = new FileInfo(outputPath).Length,
+                ["msvc_kit_preflight"] = toolchain,
             });
         }
 
-        private static void EnsureWindowsBuildToolchain()
+        private static JObject EnsureWindowsBuildToolchain()
         {
+            var il2cpp = PlayerSettings.GetScriptingBackend(BuildTargetGroup.Standalone) == ScriptingImplementation.IL2CPP;
             DccMcpWindowsToolchain.Ensure(
-                PlayerSettings.GetScriptingBackend(BuildTargetGroup.Standalone) == ScriptingImplementation.IL2CPP,
+                il2cpp,
                 Application.platform == RuntimePlatform.WindowsEditor,
                 BuildPipeline.IsBuildTargetSupported(BuildTargetGroup.Standalone, BuildTarget.StandaloneWindows64),
                 () => DccMcpWindowsToolchain.InspectCompiler(EditorApplication.applicationContentsPath));
+            if (!il2cpp) { return null; }
+            JObject report;
+            try { report = JObject.Parse(DccMcpWindowsToolchain.ReadMsvcKitDoctor()); }
+            catch (JsonReaderException exception)
+            {
+                throw new InvalidOperationException("msvc-kit doctor returned invalid JSON; verify the pinned CLI.", exception);
+            }
+            var msvc = DccMcpWindowsToolchain.RequiredSelection("MSVC_VERSION");
+            var sdk = DccMcpWindowsToolchain.RequiredSelection("SDK_VERSION");
+            return ValidateWindowsMsvcKitReport(report, msvc, sdk, DccMcpWindowsToolchain.InspectPinnedRegisteredToolchain);
+        }
+
+        internal static JObject ValidateWindowsMsvcKitReport(
+            JObject report, string msvc, string sdk,
+            Func<string, string, IDictionary<string, string>, string> inspectRegistered)
+        {
+            if (report == null) { throw new InvalidOperationException("msvc-kit doctor returned no report."); }
+            var selected = report["toolchain"] as JObject;
+            if ((string)report["schema"] != "msvc-kit.doctor.v1" || (string)report["status"] != "passed"
+                || selected == null || (string)selected["arch"] != "x64" || (string)selected["host_arch"] != "x64"
+                || (string)selected.SelectToken("msvc.version") != msvc
+                || (string)selected.SelectToken("sdk.version") != sdk)
+            {
+                throw new InvalidOperationException("msvc-kit doctor did not verify the requested exact x64 toolchain.");
+            }
+            var checks = report["checks"] as JArray;
+            foreach (var stage in new[] { "compile", "resource", "link", "manifest", "execute" })
+            {
+                var matches = 0;
+                if (checks != null)
+                {
+                    foreach (var item in checks)
+                    {
+                        var check = item as JObject;
+                        if (check != null && (string)check["id"] == "probe." + stage)
+                        {
+                            if ((string)check["status"] != "passed")
+                            {
+                                throw new InvalidOperationException("msvc-kit doctor did not pass probe." + stage);
+                            }
+                            matches++;
+                        }
+                    }
+                }
+                if (matches != 1)
+                {
+                    throw new InvalidOperationException("msvc-kit doctor lacks one successful probe." + stage);
+                }
+            }
+            var tools = new Dictionary<string, string>();
+            var reportedTools = selected["tools"] as JObject;
+            if (reportedTools != null)
+            {
+                foreach (var property in reportedTools.Properties())
+                {
+                    if (property.Value.Type == JTokenType.String) { tools[property.Name] = (string)property.Value; }
+                }
+            }
+            var error = inspectRegistered(msvc, sdk, tools);
+            if (!string.IsNullOrEmpty(error)) { throw new InvalidOperationException(error); }
+            report["consumer_cli"] = new JObject
+            {
+                ["version"] = DccMcpWindowsToolchain.MsvcKitVersion,
+                ["sha256"] = DccMcpWindowsToolchain.MsvcKitSha256,
+            };
+            // BuildPlayer is still authoritative; a doctor probe is not a Unity build.
+            report["unity_compiler_selection_verified"] = false;
+            return report;
         }
 
         private static void AdvanceAndroidBuild(JObject store, JObject job)

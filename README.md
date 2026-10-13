@@ -91,7 +91,7 @@ assembly reloads.
 For local development, run `dcc-mcp-unity-standalone --bridge-port 3852 --watch-pid <unity-pid>`.
 
 Windows IL2CPP player builds check registered C++ tools, SDK and player resources.
-Standalone releases can optionally pin an explicit msvc-kit toolchain; ordinary
+Windows native builds require the pinned self-managed msvc-kit gate; ordinary
 Editor use does not require MSVC. See the [Windows build contract](docs/windows-toolchain.md).
 
 ## Agent workflow
