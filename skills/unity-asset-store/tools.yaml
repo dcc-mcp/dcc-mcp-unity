@@ -1,0 +1,56 @@
+tools:
+  - name: plan_asset_acquisition
+    description: Recognize an official Unity Asset Store product URL locally and return a manual acquisition plan. Does not access the store, verify entitlement, download, or import a package. Use existing Unity tools to verify assets after manual import.
+    input_schema:
+      type: object
+      required: [asset_url]
+      properties:
+        asset_url:
+          type: string
+          minLength: 1
+          maxLength: 2048
+          description: Complete HTTPS product URL on assetstore.unity.com. Tracking parameters are discarded.
+      additionalProperties: false
+    output_schema:
+      type: object
+      required: [success, message, prompt, error, context]
+      properties:
+        success: {type: boolean}
+        message: {type: string}
+        prompt: {type: [string, "null"]}
+        error: {type: [string, "null"]}
+        context:
+          type: object
+          properties:
+            asset_id: {type: string, pattern: '^[1-9][0-9]*$'}
+            product_url: {type: string, format: uri}
+            acquisition_state: {type: string, enum: [requires_official_acquisition]}
+            download_supported: {type: boolean, const: false}
+            import_supported: {type: boolean, const: false}
+            acquisition_steps:
+              type: array
+              items: {type: string}
+              minItems: 1
+      allOf:
+        - if:
+            properties:
+              success: {const: true}
+            required: [success]
+          then:
+            properties:
+              context:
+                required: [asset_id, product_url, acquisition_state, download_supported, import_supported, acquisition_steps]
+    read_only: true
+    destructive: false
+    idempotent: true
+    execution: sync
+    affinity: any
+    enforce_thread_affinity: true
+    timeout_hint_secs: 5
+    source_file: scripts/plan_asset_acquisition.py
+    call_examples:
+      - arguments:
+          asset_url: https://assetstore.unity.com/packages/templates/systems/mech-combat-kit-164854
+        note: Plan official acquisition of Mech Combat Kit without accessing an account or downloading files.
+    next-tools:
+      on-success: [unity_project__inspect_project]
