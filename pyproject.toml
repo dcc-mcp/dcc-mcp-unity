@@ -46,6 +46,7 @@ artifacts = ["src/dcc_mcp_unity/skills/**", "src/dcc_mcp_unity/unity_package/**"
 [tool.hatch.build.targets.sdist]
 include = [
   "src/dcc_mcp_unity",
+  "skills",
   "tests",
   "tools",
   "docs",

@@ -150,6 +150,25 @@ set becomes available. It exposes the native CustomTool catalog so agents can in
 tools, submit requests, and query results through Tuanjie's Codely platform. Sign-in, credits,
 downloads, and task recovery remain owned by the Tuanjie runtime.
 
+## Optional Asset Store skill
+
+The optional [`unity-asset-store`](skills/unity-asset-store/SKILL.md) marketplace skill
+recognizes official product links such as Mech Combat Kit and plans acquisition through
+Unity's official interface. It performs no network access, download, or import. The user
+acquires the package and reviews its import in Package Manager; the existing project and
+diagnostic tools then check imported assets and compilation errors. Vendor resources and
+licenses are not included in the skill.
+
+Once its marketplace entry is published:
+
+```bash
+dcc-mcp-cli marketplace install unity-asset-store --dcc unity
+```
+
+For source testing before publication, add the repository's `skills` directory to
+`DCC_MCP_SKILL_PATHS`. This optional directory is not included among the wheel's bundled
+skills, preventing a second installed copy when the marketplace package is used.
+
 ## Validation boundary
 
 Public CI validates Python 3.9 and 3.12 on Windows, macOS, and Linux; validates the bundled skill
@@ -167,8 +186,8 @@ Python sidecar and records the reported Editor version as an artifact.
 ```bash
 uv sync --extra dev
 uv run python -m pytest
-uv run ruff check src tests tools
-uv run ruff format --check src tests tools
+uv run ruff check src skills tests tools
+uv run ruff format --check src skills tests tools
 uv run python tools/lint_skills.py
 uv run python -m build
 uv run python -m twine check dist/*
