@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.16.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.15.0...v0.16.0) (2026-10-28)
+
+
+### Features
+
+* add optional Unity Asset Store acquisition skill ([0a28a7f](https://github.com/dcc-mcp/dcc-mcp-unity/commit/0a28a7fd81d929dfd2358ba6a3f1147ee6c6af07))
+
+
+### Documentation
+
+* refresh the generated DCC-MCP host matrix pointer ([c31d8d6](https://github.com/dcc-mcp/dcc-mcp-unity/commit/c31d8d6a4d19e11a7a0f41289bb45b7074502e8b))
+
 ## [0.15.0](https://github.com/dcc-mcp/dcc-mcp-unity/compare/v0.14.0...v0.15.0) (2026-10-12)
 
 
