@@ -41,7 +41,23 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - run: python -m pip install -e ".[dev]"
+      - name: Prepare pinned msvc-kit with existing Windows tools
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./.github/scripts/prepare-msvc-kit.ps1
       - run: python -m pytest
+        env:
+          # Compile the C# fixtures and inspect the runner's registered VS/SDK.
+          # This does not install Unity or establish IL2CPP build acceptance.
+          DCC_MCP_REQUIRE_WINDOWS_TOOLCHAIN: ${{ runner.os == 'Windows' && '1' || '' }}
+          DCC_MCP_REQUIRE_SELF_MSVC_KIT: ${{ runner.os == 'Windows' && '1' || '' }}
+      - name: Upload real msvc-kit consumer evidence
+        if: ${{ always() && runner.os == 'Windows' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: msvc-kit-contract-python-${{ matrix.python-version }}
+          path: dist/toolchain-evidence/
+          if-no-files-found: warn
 
   lint-build:
     name: Lint, skill contracts, and package build
